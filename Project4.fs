@@ -62,6 +62,7 @@ let app =
   choose [
     //LoginUserPoint
     GET >=> choose [path "/" >=> Files.file "index.html"; Files.browseHome]
+    //GET >=> choose [path "/" >=> Files.file "login.html"; Files.browseHome]
     //GET >=> path "/" >=> Files.file "index.html"
     //GET >=> Files.browseHome
   ]
