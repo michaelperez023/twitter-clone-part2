@@ -183,32 +183,17 @@
                         <button class="btn" type="submit">Tweet</button>
                     </label>
                 </div>
-
-                <!--
-                    <div class="well"> 
-                    <form id="followform" class="form" action="http://localhost:8080/follow" method="post" role="form">
-                        <h4>Follow</h4>
-                        <div class="input-group text-center">
-                        <input class="form-control input-lg" placeholder="Enter the userid" type="text" name="value">
-                        <span class="input-group-btn"><input class="btn btn-lg btn-primary" name="follow-button" type="submit" value="Follow"></span>
-                        </div>
-                    </form>
-                    </div>-->
-                
                 
                 <h3>Follow</h3>
                     <div class="card">
-                        <form id="followForm" action="http://localhost:8080/follow" method="post" role="form"></form>
+                        <form id="followForm" action="http://localhost:8080/follow" method="post" role="form">
                             <label class="input">
-                                <!--<input type="text" name="user" id="user" class="form-control" placeholder="Type username here " value="" required/>
-                                <button class="btn" type="submit">Follow</button>-->
                                 <input class="form-control" placeholder="Type username here" type="text" name="value" required>
                                 <button class="btn" type="submit" name="follow-button">Follow</button>
                             </label>
                         </form>
                     </div>
                 
-
                 <h3>Search</h3>
                 <div class="card">
                     <label class="input">
@@ -241,10 +226,9 @@
         function onOpen(evt, uid)
         {
             websocket.send(JSON.stringify({
-                'userID': uid,
+                'username': uid,
                 'value': ""
             }));
-            alert("opening")
         }
 
         function redirectToLogin() {
@@ -358,7 +342,7 @@
                     show('homepage', 'loginpage');
                     user = v['username@'];
                     $('#userlabel').text(user);
-                    //initWebSocket(v['username@']);
+                    initWebSocket(v['username@']);
                 }           
             } catch (error) {
                 alert("error: " + error)
