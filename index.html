@@ -122,8 +122,8 @@
         <div class="topnav">
             <a class="active">Login</a>
             <a onclick="return show('registerpage','loginpage');">Register</a>
-            <!--<a onclick="alert('You must login before visiting the Home page.');">Home</a>-->
-            <a onclick="return show('homepage','loginpage');">Home</a>
+            <a onclick="alert('You must login before visiting the Home page.');">Home</a>
+            <!--<a onclick="return show('homepage','loginpage');">Home</a>-->
         </div>
 
         <form id="loginForm" action="http://localhost:8080/login" method="post" role="form">
@@ -201,8 +201,8 @@
                         <button class="btn" type="submit">Search</button>
                     </label>
                 </div>
-                <h3>Logout</h3>
-                <button class="logout" type="submit">Logout</button>
+
+                <button class="logout" type="submit" onClick="window.location.reload();">Logout</button>
              </div>
              <div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
                  <h3>Feed</h3>
