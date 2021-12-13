@@ -4,10 +4,13 @@ open Suave.Operators
 open Suave.Successful
 open Suave.Sockets
 open Suave.WebSocket
+open Suave.Sockets.Control
+open Suave.RequestErrors
 open Newtonsoft.Json
 open Newtonsoft.Json.Serialization
 open Akka.FSharp
 open Akka.Actor
+open FSharp.Json
 
 let system = ActorSystem.Create("TwitterServer")
 
@@ -30,6 +33,7 @@ type RestResource<'a> = {
 type FeedActorMessages = 
   | RegisterNewUser of string
   | Follow of string * string
+  | AddActiveUsers of string * WebSocket
 
 let agent = MailboxProcessor<string*WebSocket>.Start(fun inbox ->
   let rec messageLoop() = async {
@@ -60,17 +64,64 @@ let FeedActor (mailbox:Actor<_>) =
           followSet <- usernameUsernamesFollowedSetMap.[followedUsername]
           followSet <- Set.add username followSet
           usernameUsernamesFollowedSetMap <- Map.add followedUsername followSet usernameUsernamesFollowedSetMap
-          printfn "User %s started following you! for %s" username followedUsername
           //let mutable jsonData: ResponseType = 
             //{username = followedUsername; service= "Follow"; code = "OK"; message = sprintf "User %s started following you!" username}
           //let mutable consJson = Json.serialize jsonData
           // printfn "consjaosn = %A" consJson
           // agent.Post (consJson, activeUsers.[followedUsername]) TODO
+      | AddActiveUsers(username, userWebSkt) ->
+        if activeUsers.ContainsKey username then  
+          activeUsers <- Map.remove username activeUsers
+        activeUsers <- Map.add username userWebSkt activeUsers 
+        let mutable feedsPub = ""
+        let mutable sertype = ""
+        if feedtable.ContainsKey username then
+          let mutable feedsTop = ""
+          let mutable fSize = 10
+          let feedList:List<string> = feedtable.[username]
+          if feedList.Length = 0 then
+            sertype <- "Follow"
+            feedsPub <- sprintf "No feeds yet!!"
+          else
+            if feedList.Length < 10 then
+                fSize <- feedList.Length
+            // printfn"fsize = %d" fSize
+            for i in [0..(fSize-1)] do
+              // printfn "feed %d = %s" i feedtable.[username].[i]
+              feedsTop <- "-" + feedtable.[username].[i] + feedsTop
+
+            feedsPub <- feedsTop
+            sertype <- "LiveFeed"
+          // printfn "feeds pub = %A" feedsPub
+          let jsonData: ResponseType = {username = username; message = feedsPub; code = "OK"; service=sertype}
+          let consJson = Json.serialize jsonData
+          agent.Post (consJson, userWebSkt) 
       return! loop()
   }
   loop()
 
 let feedActor = spawn system (sprintf "FeedActor") FeedActor
+
+let liveFeed (webSocket : WebSocket) (context: HttpContext) =
+  let rec loop() =
+    let mutable presentUser = ""
+    socket { 
+      let! msg = webSocket.read()
+      match msg with
+      | (Text, data, true) ->
+        let reqMsg = UTF8.toString data
+        let parsed = Json.deserialize<RequestType> reqMsg
+        presentUser <- parsed.username
+        //feedActor <! AddActiveUsers(parsed.username, webSocket)
+        return! loop()
+      | (Close, _, _) ->
+        printfn "Closed WEBSOCKET"
+        //feedActor <! RemoveActiveUsers(presentUser)
+        let emptyResponse = [||] |> ByteSegment
+        do! webSocket.send Close emptyResponse true
+      | _ -> return! loop()
+    }
+  loop()
 
 let mutable usernamePasswordMap = Map.empty
 let mutable usernameFollowersSetMap = Map.empty // TODO setup
@@ -157,6 +208,7 @@ let FollowUserPoint = entryRequest "follow" {Entry = followUser}
 
 let app =
   choose [
+    path "/livefeed" >=> handShake liveFeed
     LoginUserPoint
     RegisterUserPoint
     FollowUserPoint
