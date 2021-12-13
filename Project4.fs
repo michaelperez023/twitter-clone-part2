@@ -1,460 +1,154 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="//code.jquery.com/jquery-1.11.1.min.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title> Login Page </title>
-    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
-    <style>
-        Body {
-            font-family: Calibri, Helvetica, sans-serif;
-            background-color: #1DA1F2;
-        }
+open Suave
+open Suave.Filters
+open Suave.Operators
+open Suave.Successful
+open Suave.Sockets
+open Suave.WebSocket
+open Newtonsoft.Json
+open Newtonsoft.Json.Serialization
+open Akka.FSharp
+open Akka.Actor
 
-        button {
-            background-color: #1DA1F2;
-            width: 100%;
-            color: black;
-            padding: 15px;
-            margin: 10px 0px;
-            border: none;
-            cursor: pointer;
-        }
+let system = ActorSystem.Create("TwitterServer")
 
-        form {
-            border: 3px solid #f1f1f1;
-        }
+type ResponseType = {
+  username: string
+  message: string
+  service: string
+  code: string
+}
 
-        input[type=text], input[type=password] {
-            width: 100%;
-            margin: 8px 0;
-            padding: 12px 20px;
-            display: inline-block;
-            border: 2px solid #1DA1F2;
-            box-sizing: border-box;
-        }
+type RequestType = {
+  username: string
+  value: string
+}
 
-        button:hover {
-            opacity: 0.7;
-        }
+type RestResource<'a> = {
+    Entry : RequestType -> string
+}
 
-        .cancelbtn {
-            width: auto;
-            padding: 10px 18px;
-            margin: 10px 5px;
-        }
+type FeedActorMessages = 
+  | RegisterNewUser of string
 
-        .container {
-            padding: 25px;
-            background-color: white;
-        }
+let agent = MailboxProcessor<string*WebSocket>.Start(fun inbox ->
+  let rec messageLoop() = async {
+    let! msg,webSkt = inbox.Receive()
+    let byteRes =
+      msg
+      |> System.Text.Encoding.ASCII.GetBytes
+      |> ByteSegment
+    let! _ = webSkt.send Text byteRes true
+    return! messageLoop()
+  }
+  messageLoop()
+)
 
-        .topnav {
-            overflow: hidden;
-            background-color: #333;
-        }
+let FeedActor (mailbox:Actor<_>) = 
+  let mutable followers = Map.empty
+  let mutable activeUsers = Map.empty
+  let mutable feedtable = Map.empty
+  let rec loop () = actor {
+      let! message = mailbox.Receive() 
+      match message with
+      | RegisterNewUser(userId) ->
+        followers <- Map.add userId Set.empty followers
+        feedtable <- Map.add userId List.empty feedtable
+      return! loop()
+  }
+  loop()
 
-        .topnav a {
-            float: left;
-            color: #1DA1F2;
-            text-align: center;
-            padding: 14px 16px;
-            text-decoration: none;
-            font-size: 17px;
-        }
+let feedActor = spawn system (sprintf "FeedActor") FeedActor
 
-        .topnav a:hover {
-            background-color: #1DA1F2;
-            color: black;
-        }
+let mutable usernamePasswordMap = Map.empty
+let mutable usernameFollowersSetMap = Map.empty // TODO setup
 
-        .topnav a.active {
-            background-color: #1DA1F2;
-            color: white;
-        }
+let loginUser userInput =
+  let mutable response = ""
+  if usernamePasswordMap.ContainsKey userInput.username then
+    if usernamePasswordMap.[userInput.username] = userInput.value then
+      let rectype: ResponseType = {username = userInput.username; message = sprintf "User %s logged in successfully" userInput.username; service = "Login"; code = "OK"}
+      response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    else 
+      let rectype: ResponseType = {username = userInput.username; message = "Invalid username and/or password"; service = "Login"; code = "FAIL"}
+      response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+  else
+    let rectype: ResponseType = {username = userInput.username; message = "Invalid username and/or password"; service = "Login"; code = "FAIL"}
+    response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+  response
 
-        /* Clear floats after the columns */
-        .row:after {
-            content: "";
-            display: table;
-            clear: both;
-        }
+let registerUser userInput =
+  let mutable response = ""
+  if usernamePasswordMap.ContainsKey userInput.username then
+    let rectype: ResponseType = {username = userInput.username; message = sprintf "User %s already registered" userInput.username; service = "Register"; code = "FAIL"}
+    response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+  else
+    usernamePasswordMap <- Map.add userInput.username userInput.value usernamePasswordMap
+    usernameFollowersSetMap <- Map.add userInput.username Set.empty usernameFollowersSetMap // TODO
+    feedActor <! RegisterNewUser(userInput.username)
+    let rectype: ResponseType = {username = userInput.username; message = sprintf "User %s registered successfully" userInput.username; service = "Register"; code = "OK"}
+    response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+  response
 
-        .card {
-            background: var(--color-background);
-            padding: calc(4 * var(--size-bezel));
-            width: 500px;
-            margin-top: calc(4 * var(--size-bezel));
-        }
+let followUser userInput =
+  let mutable resp = ""
+  if userInput.value <> userInput.username then
+    if usernameFollowersSetMap.ContainsKey userInput.value then
+      if not (usernameFollowersSetMap.[userInput.value].Contains userInput.username) then
+        let mutable tempset = usernameFollowersSetMap.[userInput.value]
+        tempset <- Set.add userInput.username tempset
+        usernameFollowersSetMap <- Map.add userInput.value tempset usernameFollowersSetMap
+        //feedActor <! Followers(userInput.username, userInput.value) 
+        let rectype: ResponseType = {username = userInput.username; service="Follow"; message = sprintf "You started following %s!" userInput.value; code = "OK"}
+        resp <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+      else 
+        let rectype: ResponseType = {username = userInput.username; service="Follow"; message = sprintf "You are already following %s!" userInput.value; code = "FAIL"}
+        resp <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString      
+    else  
+      let rectype: ResponseType = {username = userInput.username; service="Follow"; message = sprintf "Invalid request, No such user (%s)." userInput.value; code = "FAIL"}
+      resp <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+  else
+    let rectype: ResponseType = {username = userInput.username; service="Follow"; message = sprintf "You cannot follow yourself."; code = "FAIL"}
+    resp <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString    
+  // printfn "follow response: %s" resp
+  resp
 
-        .btn {
-            padding:0px;
-            height:33px;
-            width:100px;
-            text-align: center;
-        }
+let respInJson v =
+    let jsonSerializerSettings = JsonSerializerSettings()
+    jsonSerializerSettings.ContractResolver <- CamelCasePropertyNamesContractResolver()
+    JsonConvert.SerializeObject(v, jsonSerializerSettings)
+    |> OK 
+    >=> Writers.setMimeType "application/json; charset=utf-8"
 
-        .logout {
-            padding: 0;
-            height:30px;
-            width:75px;
-            background-color: red;
-        }
-        
-        h2{
-            display:inline;
-        }
-        
-    </style>
+let fromJson<'a> json = JsonConvert.DeserializeObject(json, typeof<'a>) :?> 'a   
 
-    <script>
-        function show(shown, hidden) {
-            document.getElementById(shown).style.display = 'block';
-            document.getElementById(hidden).style.display = 'none';
-            return false;
-        }
-    </script>
-</head>
-<body>
-    <center> <h1> Twitter Clone </h1> </center>
-    <div id="loginpage" class="container">
-        <div class="topnav">
-            <a class="active">Login</a>
-            <a onclick="return show('registerpage','loginpage');">Register</a>
-            <a onclick="alert('You must login before visiting the Home page.');">Home</a>
-        </div>
+let getReqResource<'a> (requestInp : HttpRequest) = 
+  let getInString (rawForm:byte[]) = System.Text.Encoding.UTF8.GetString(rawForm)
+  let requestArr:byte[] = requestInp.rawForm
+  requestArr |> getInString |> fromJson<RequestType>
 
-        <form id="loginForm" action="http://localhost:8080/login" method="post" role="form">
-            <div class="container">
-                <label>Username : </label>
-                <input type="text" name="username" id="username" tabindex="1" class="form-control" placeholder="Username" value="" required>
-            </div>
-            <div class="container">
-                <label>Password : </label>
-                <input type="password" name="value" id="username" tabindex="2" class="form-control" placeholder="Password" value="" required>
-            </div>
-            <div class="container">
-                <span id="loginerror"></span>
-            </div>
-            <button type="submit" tabindex="3">Login</button>
-        </form>
-    </div>
+let entryRequest resourceName resource = 
+  let resourcePath = "/" + resourceName
+  
+  let entryDone userInput =
+    let userRegResp = resource.Entry userInput
+    userRegResp
+  
+  choose [
+    path resourcePath >=> choose [
+      POST >=> request (getReqResource >> entryDone >> respInJson)
+    ]
+  ]
 
-    <div id="registerpage" class="container" style="display:none">
-        <div class="topnav">
-            <a onclick="return show('loginpage','registerpage');">Login</a>
-            <a class="active">Register</a>
-            <a onclick="alert('You must login before visiting the Home page.');">Home</a>
-        </div>
+let LoginUserPoint = entryRequest "login" {Entry = loginUser}
+let RegisterUserPoint = entryRequest "register" {Entry = registerUser}
+let FollowUserPoint = entryRequest "follow" {Entry = followUser}
 
-        <form id="registerForm" action="http://localhost:8080/register" method="post" role="form">
-            <div class="container">
-                <label>Username : </label>
-                <input type="text" name="username" id="username" tabindex="1" class="form-control" placeholder="Username" value="" required>
-            </div>
-            <div class="container">
-                <label>Password : </label>
-                <input type="password" name="value" id="username" tabindex="2" class="form-control" placeholder="Password" value="" required>
-            </div>
-            <div class="container">
-                <span id="registererror"></span>
-            </div>
-            <button type="submit" tabindex="3">Register</button>
-        </form>
-    </div>
+let app =
+  choose [
+    LoginUserPoint
+    RegisterUserPoint
+    FollowUserPoint
+    GET >=> choose [path "/" >=> Files.file "index.html"; Files.browseHome]
+  ]
 
-    <div id="homepage" class="container" style="display:none">
-        <div class="topnav">
-            <a onclick="return show('loginpage','homepage');">Login</a>
-            <a onclick="return show('registerpage','homepage');">Register</a>
-            <a class="active">Home</a>
-        </div>
-        
-        <div><h2> Logged in as </h2><h2 id="userlabel"></h2></div>
-
-         <div class="row" style="display:block; width:100%;">
-             <div style="width:50%; float: left; display: inline-block;" style="background-color:#aaa;">
-                 <h3>Tweet</h3>
-                 <div class="card">
-                     <label class="input">
-                         <input type="text" placeholder="What do you want to Tweet about " />
-                     </label>
-                 </div>
-                 <button class="btn" type="submit">Tweet</button>
-                 <h3>Follow</h3>
-                 <div class="card">
-                     <label class="input">
-                         <input type="text" placeholder="Type UserID here " />
-                     </label>
-                 </div>
-                 <button class="btn" type="submit">Follow</button>
-                 <h3>Search</h3>
-                 <div class="card">
-                     <label class="input">
-                         <input type="text" placeholder="Type @ or # here " />
-                     </label>
-                 </div>
-                 <button class="btn" type="submit">Search</button>
-                 <h3>Logout</h3>
-                 <button class="logout" type="submit">Logout</button>
-             </div>
-             <div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
-                 <h3>Feed</h3>
-                 <div class="w3-panel w3-blue w3-card-4">
-                     <p>This panel will be used to print feeds</p>
-                 </div>
-             </div>
-         </div>
-        
-    </div>
-
-    <script>
-        function initWebSocket(username) {
-            websocket = new WebSocket("ws://localhost:8080/livefeed");
-            websocket.onopen = function(evt) { onOpen(evt, username) };
-            websocket.onclose = function(evt) { onClose(evt) };
-            websocket.onmessage = function(evt) { onMessage(evt) };
-            websocket.onerror = function(evt) { onError(evt) };
-        }
-
-        function onOpen(evt, uid)
-        {
-            websocket.send(JSON.stringify({
-                'userID': uid,
-                'value': ""
-            }));
-            alert("opening")
-        }
-
-        function redirectToLogin() {
-            const xhr = new XMLHttpRequest();
-            const url='http://localhost:8080/';
-            Http.open("GET", url);
-            Http.send();
-        }
-
-        function printToFeed(msg, uid, ser) {
-            if($("#feedresults li").length === 1 && $($(".feed"),"li:eq(0)",$("#feedresults"))[0].innerText === "No feeds yet!!") {
-                $("#feedresults").empty();
-            }
-            if(ser === "Follow") {
-                var something = "<li class='list-group-item'><div class='feed'>" + msg + "</div></li>";
-                $("#feedresults").prepend(something);
-            }
-            else if(ser === "LiveFeed") {
-                // console.log(msg);
-                var splitmsgs = msg.split('-');
-                for (var i =1; i< splitmsgs.length; i++) {
-                    // console.log(splitmsgs[i]);
-                    var insSplit = splitmsgs[i].split('^')
-                    var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
-                    $("#feedresults").prepend(something);
-                } 
-            }
-            else {
-                var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + uid + "</span><br><span class='tweetlabel'>" + msg + "</span></div></li>"; 
-                $("#feedresults").prepend(something);
-            }
-        }
-
-        function printToQuery(msg, uid, ser) {
-            // console.log(msg);
-            $("#searchresults").empty();
-            var splitmsgs = msg.split('-');
-            for (var i =1; i< splitmsgs.length; i++) {
-                // console.log(splitmsgs[i]);
-                var insSplit = splitmsgs[i].split('^')
-                if(insSplit.length > 1) {
-                    var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
-                }
-                else {
-                    var something = "<li class='list-group-item'><div class='feed'><span class='tweetlabel'>" + insSplit[0] + "</span></div></li>";    
-                }
-                $("#searchresults").append(something);
-            } 
-        }
-
-        function onClose(evt)
-        {
-            websocket.close();
-            redirectToLogin();
-        }
-
-        function onMessage(evt)
-        {
-            var rep = JSON.parse(evt.data);
-            // console.log(rep);
-            if(rep['service'] === "Follow") {
-                printToFeed(rep['message'],rep['userID'],rep['service']);
-            }
-            else if(rep['service'] !== "LiveFeed") {
-                var spt = rep['message'].split('^');
-                // console.log(spt);
-                printToFeed(spt[1],spt[0],rep['service']);
-            }
-            else {
-                printToFeed(rep['message'],rep['userID'],rep['service']);
-            }
-        }
-
-        function onError(evt)
-        {
-            writeToScreen('<span style="color: red;">ERROR:</span> ' + evt.data);
-        }   
-
-        async function postFormDataAsJson({ url, formData }) {
-            const plainFormData = Object.fromEntries(formData.entries());
-            const formDataJsonString = JSON.stringify(plainFormData);
-            //alert(formDataJsonString)
-            const fetchOptions = {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-                body: formDataJsonString,
-            };
-            const response = await fetch(url, fetchOptions);
-            if (!response.ok) {
-                const errorMessage = await response.text();
-                alert("error: " + errorMessage);
-                throw new Error(errorMessage);
-            }
-	        return response.json();
-        }
-
-        async function handleLogin(event) {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const url = form.action;
-            try {
-                const formData = new FormData(form);
-                const responseData = await postFormDataAsJson({ url, formData });
-                var v = JSON.parse(responseData);
-                if(v['code@'] !== "OK") {
-                    $('#loginerror').text(v['message@']);
-                } else {
-                    show('homepage', 'loginpage');
-                    user = v['username@'];
-                    $('#userlabel').text(user);
-                    initWebSocket(v['username@']);
-                }           
-            } catch (error) {
-                alert("error: " + error)
-                console.error(error);
-            }
-        }
-
-        async function handleRegistration(event) {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const url = form.action;
-            try {
-                const formData = new FormData(form);
-                const responseData = await postFormDataAsJson({ url, formData });
-                var v = JSON.parse(responseData);
-                if(v['code@'] !== "OK") {
-                    $('#registererror').text(v['message@']);
-                } else {
-                    $("#loginForm")[0].reset();
-                    $("#registerForm")[0].reset();
-                    show('loginpage','registerpage');
-                    $('#loginerror').text('');
-                    $('#registererror').text('');
-                    $(this).addClass('active');
-                }           
-            } catch (error) {
-                console.error(error);
-            }
-        }
-
-        const loginForm = document.getElementById('loginForm');
-        loginForm.addEventListener('submit', handleLogin);
-
-        const registerForm = document.getElementById('registerForm');
-        registerForm.addEventListener('submit', handleRegistration);
-
-        /* // TODO
-        function clearFields() {
-            $("#tweetform")[0].reset();
-            $("#searchform")[0].reset();
-            $("#followform")[0].reset();
-        }
-
-        async function handleFormSubmit(event) {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const url = form.action;
-            try {
-                const formData = new FormData(form);
-                formData.append('userID',user);
-                const responseData = await postFormDataAsJson({ url, formData });
-                var v = JSON.parse(responseData);
-                clearFields();
-                if(v['code@'] !== "OK") {
-                    // console.log("NOT OK");
-                    window.alert(v['message@']);
-                }
-                else {
-                    if(v['service@'] === "Follow") {
-                        printToFeed(v['message@'], v['userID@'], v['service@']);
-                    }
-                    else if(v['service@'] !== "Query") {
-                        var temp = v['message@'].split('^');
-                        printToFeed(temp[1], temp[0], v['service@']);
-                    }
-                    else {
-                        printToQuery(v['message@'], v['userID@'], v['service@']);
-                    }
-                }               
-            } catch (error) {
-                console.error(error);
-            }                
-        }
-
-        async function GetQueryJson({ url }) {
-            const fetchOptions = {
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-            };
-            const response = await fetch(url, fetchOptions);
-            if (!response.ok) {
-                const errorMessage = await response.text();
-                throw new Error(errorMessage);
-            }
-	        return response.json();
-        }
-
-        async function handleQuerySubmit(event) {
-            event.preventDefault();
-            const form = event.currentTarget;
-            var url = form.action;
-            try {
-                const formData = new FormData(form);
-                // formData.append('userID',user);
-                url = url + "/" + formData.get('value');
-                const v = await GetQueryJson({ url });
-                clearFields();
-                if(v['code'] !== "OK") {
-                    window.alert(v['message']);
-                }
-                else {
-                    printToQuery(v['message'], v['userID'], v['service']);
-                }               
-            } catch (error) {
-                console.error(error);
-            }                
-        }
-        
-        const tweetForm = document.getElementById("tweetform");
-        tweetForm.addEventListener("submit", handleFormSubmit);
-        const followForm = document.getElementById("followform");
-        followForm.addEventListener("submit", handleFormSubmit);
-        const searchForm = document.getElementById("searchform");
-        searchForm.addEventListener("submit", handleQuerySubmit);*/
-    </script>
-</body>
-</html>
+startWebServer defaultConfig app
