@@ -201,15 +201,24 @@
                         <button class="btn" type="submit">Search</button>
                     </label>
                 </div>
-
                 <button class="logout" type="submit" onClick="window.location.reload();">Logout</button>
              </div>
-             <div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
+
+
+             <div class="panel panel-default">
+                <div class="panel-heading"><h4>Live Feed</h4></div>
+                 <div class="panel-body">
+                   <ul id="feedresults" class="list-group">
+                   </ul>
+                 </div>
+              </div>
+
+             <!--<div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
                  <h3>Feed</h3>
                  <div class="w3-panel w3-blue w3-card-4">
                      <p>This panel will be used to print feeds</p>
                  </div>
-             </div>
+             </div>-->
          </div>
         
     </div>
