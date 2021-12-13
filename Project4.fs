@@ -29,6 +29,7 @@ type RestResource<'a> = {
 
 type FeedActorMessages = 
   | RegisterNewUser of string
+  | Follow of string * string
 
 let agent = MailboxProcessor<string*WebSocket>.Start(fun inbox ->
   let rec messageLoop() = async {
@@ -44,15 +45,27 @@ let agent = MailboxProcessor<string*WebSocket>.Start(fun inbox ->
 )
 
 let FeedActor (mailbox:Actor<_>) = 
-  let mutable followers = Map.empty
+  let mutable usernameUsernamesFollowedSetMap = Map.empty
   let mutable activeUsers = Map.empty
   let mutable feedtable = Map.empty
   let rec loop () = actor {
       let! message = mailbox.Receive() 
       match message with
-      | RegisterNewUser(userId) ->
-        followers <- Map.add userId Set.empty followers
-        feedtable <- Map.add userId List.empty feedtable
+      | RegisterNewUser(username) ->
+        usernameUsernamesFollowedSetMap <- Map.add username Set.empty usernameUsernamesFollowedSetMap
+        feedtable <- Map.add username List.empty feedtable
+      | Follow(username, followedUsername) ->
+        if usernameUsernamesFollowedSetMap.ContainsKey followedUsername then
+          let mutable followSet = Set.empty
+          followSet <- usernameUsernamesFollowedSetMap.[followedUsername]
+          followSet <- Set.add username followSet
+          usernameUsernamesFollowedSetMap <- Map.add followedUsername followSet usernameUsernamesFollowedSetMap
+          printfn "User %s started following you! for %s" username followedUsername
+          //let mutable jsonData: ResponseType = 
+            //{username = followedUsername; service= "Follow"; code = "OK"; message = sprintf "User %s started following you!" username}
+          //let mutable consJson = Json.serialize jsonData
+          // printfn "consjaosn = %A" consJson
+          // agent.Post (consJson, activeUsers.[followedUsername]) TODO
       return! loop()
   }
   loop()
@@ -83,7 +96,7 @@ let registerUser userInput =
     response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
   else
     usernamePasswordMap <- Map.add userInput.username userInput.value usernamePasswordMap
-    usernameFollowersSetMap <- Map.add userInput.username Set.empty usernameFollowersSetMap // TODO
+    usernameFollowersSetMap <- Map.add userInput.username Set.empty usernameFollowersSetMap
     feedActor <! RegisterNewUser(userInput.username)
     let rectype: ResponseType = {username = userInput.username; message = sprintf "User %s registered successfully" userInput.username; service = "Register"; code = "OK"}
     response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
@@ -91,13 +104,13 @@ let registerUser userInput =
 
 let followUser userInput =
   let mutable resp = ""
-  if userInput.value <> userInput.username then
+  if userInput.value <> userInput.username then 
     if usernameFollowersSetMap.ContainsKey userInput.value then
       if not (usernameFollowersSetMap.[userInput.value].Contains userInput.username) then
-        let mutable tempset = usernameFollowersSetMap.[userInput.value]
-        tempset <- Set.add userInput.username tempset
-        usernameFollowersSetMap <- Map.add userInput.value tempset usernameFollowersSetMap
-        //feedActor <! Followers(userInput.username, userInput.value) 
+        let mutable tempSet = usernameFollowersSetMap.[userInput.value]
+        tempSet <- Set.add userInput.username tempSet
+        usernameFollowersSetMap <- Map.add userInput.value tempSet usernameFollowersSetMap
+        feedActor <! Follow(userInput.username, userInput.value) 
         let rectype: ResponseType = {username = userInput.username; service="Follow"; message = sprintf "You started following %s!" userInput.value; code = "OK"}
         resp <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
       else 
@@ -109,7 +122,6 @@ let followUser userInput =
   else
     let rectype: ResponseType = {username = userInput.username; service="Follow"; message = sprintf "You cannot follow yourself."; code = "FAIL"}
     resp <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString    
-  // printfn "follow response: %s" resp
   resp
 
 let respInJson v =
