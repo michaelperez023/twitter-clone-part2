@@ -64,11 +64,11 @@ let FeedActor (mailbox:Actor<_>) =
           followSet <- usernameUsernamesFollowedSetMap.[followedUsername]
           followSet <- Set.add username followSet
           usernameUsernamesFollowedSetMap <- Map.add followedUsername followSet usernameUsernamesFollowedSetMap
-          //let mutable jsonData: ResponseType = 
-            //{username = followedUsername; service= "Follow"; code = "OK"; message = sprintf "User %s started following you!" username}
-          //let mutable consJson = Json.serialize jsonData
-          // printfn "consjaosn = %A" consJson
-          // agent.Post (consJson, activeUsers.[followedUsername]) TODO
+          let mutable jsonData: ResponseType = 
+            {username = followedUsername; service= "Follow"; code = "OK"; message = sprintf "User %s started following you!" username}
+          let mutable consJson = Json.serialize jsonData
+          printfn "consJson = %A" consJson
+          agent.Post (consJson, activeUsers.[followedUsername])
       | AddActiveUsers(username, userWebSkt) ->
         if activeUsers.ContainsKey username then  
           activeUsers <- Map.remove username activeUsers
@@ -112,7 +112,7 @@ let liveFeed (webSocket : WebSocket) (context: HttpContext) =
         let reqMsg = UTF8.toString data
         let parsed = Json.deserialize<RequestType> reqMsg
         presentUser <- parsed.username
-        //feedActor <! AddActiveUsers(parsed.username, webSocket)
+        feedActor <! AddActiveUsers(parsed.username, webSocket)
         return! loop()
       | (Close, _, _) ->
         printfn "Closed WEBSOCKET"
