@@ -2,7 +2,6 @@
 <html>
 <head>
     <script src="//code.jquery.com/jquery-1.11.1.min.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title> Login Page </title>
     <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
     <style>
@@ -20,10 +19,6 @@
             border: none;
             cursor: pointer;
         }
-
-        /*form {
-            border: 3px solid #f1f1f1;
-        }*/
 
         input[type=text], input[type=password] {
             width: 100%;
@@ -178,47 +173,47 @@
              <div style="width:50%; float: left; display: inline-block;" style="background-color:#aaa;">
                 <h3>Tweet</h3>
                 <div class="card">
-                    <label class="input">
-                        <input type="text" placeholder="What do you want to Tweet about " />
-                        <button class="btn" type="submit">Tweet</button>
-                    </label>
+                    <form id="tweetForm" class="form-horizontal" action="http://localhost:8080/tweet" method="post" role="form">
+                        <label class="input">
+                            <input class="form-control" placeholder="Type tweet here" type="text" name="value" required/>
+                            <button class="btn" type="submit" name="tweet-button">Tweet</button>
+                        </label>
+                    </form>
                 </div>
                 
                 <h3>Follow</h3>
-                    <div class="card">
-                        <form id="followForm" action="http://localhost:8080/follow" method="post" role="form">
-                            <label class="input">
-                                <input class="form-control" placeholder="Type username here" type="text" name="value" required>
-                                <button class="btn" type="submit" name="follow-button">Follow</button>
-                            </label>
-                        </form>
-                    </div>
+                <div class="card">
+                    <form id="followForm" class="form-horizontal" action="http://localhost:8080/follow" method="post" role="form">
+                        <label class="input">
+                            <input class="form-control" placeholder="Type username here" type="text" name="value" required>
+                            <button class="btn" type="submit" name="follow-button">Follow</button>
+                        </label>
+                    </form>
+                </div>
                 
                 <h3>Search</h3>
                 <div class="card">
-                    <label class="input">
-                        <input type="text" placeholder="Type @ or # here " />
-                        <button class="btn" type="submit">Search</button>
-                    </label>
+                    <form id="searchForm" class="form" action="http://localhost:8080/search" method="post" role="form">
+                        <label class="input">
+                            <input class="form-control" placeholder="Type @ or # here " type="text" name="value" required>
+                            <button class="btn" type="submit" name="search-button">Search</button>
+                        </label>
+                    </form>
+                    <div class="w3-panel w3-blue w3-card-4">
+                        <ul id="searchresults" class="list-group">
+                        </ul>
+                    </div>
                 </div>
+
                 <button class="logout" type="submit" onClick="window.location.reload();">Logout</button>
              </div>
 
-
-             <div class="panel panel-default">
-                <div class="panel-heading"><h4>Live Feed</h4></div>
-                 <div class="panel-body">
-                   <ul id="feedresults" class="list-group">
-                   </ul>
-                 </div>
-              </div>
-
-             <!--<div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
+             <div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
                  <h3>Feed</h3>
                  <div class="w3-panel w3-blue w3-card-4">
-                     <p>This panel will be used to print feeds</p>
+                     <ul id="feedresults" class="list-group"></ul>
                  </div>
-             </div>-->
+             </div>
          </div>
         
     </div>
@@ -232,19 +227,11 @@
             websocket.onerror = function(evt) { onError(evt) };
         }
 
-        function onOpen(evt, uid)
-        {
+        function onOpen(evt, uid) {
             websocket.send(JSON.stringify({
                 'username': uid,
                 'value': ""
             }));
-        }
-
-        function redirectToLogin() {
-            const xhr = new XMLHttpRequest();
-            const url='http://localhost:8080/';
-            Http.open("GET", url);
-            Http.send();
         }
 
         function printToFeed(msg, uid, ser) {
@@ -256,10 +243,10 @@
                 $("#feedresults").prepend(something);
             }
             else if(ser === "LiveFeed") {
-                // console.log(msg);
+                //console.log(msg);
                 var splitmsgs = msg.split('-');
                 for (var i =1; i< splitmsgs.length; i++) {
-                    // console.log(splitmsgs[i]);
+                    //console.log(splitmsgs[i]);
                     var insSplit = splitmsgs[i].split('^')
                     var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
                     $("#feedresults").prepend(something);
@@ -272,11 +259,11 @@
         }
 
         function printToQuery(msg, uid, ser) {
-            // console.log(msg);
+            //console.log(msg);
             $("#searchresults").empty();
             var splitmsgs = msg.split('-');
             for (var i =1; i< splitmsgs.length; i++) {
-                // console.log(splitmsgs[i]);
+                //console.log(splitmsgs[i]);
                 var insSplit = splitmsgs[i].split('^')
                 if(insSplit.length > 1) {
                     var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
@@ -291,35 +278,34 @@
         function onClose(evt)
         {
             websocket.close();
-            redirectToLogin();
+            window.location.reload();
         }
 
         function onMessage(evt)
         {
             var rep = JSON.parse(evt.data);
-            // console.log(rep);
+            //console.log(rep);
             if(rep['service'] === "Follow") {
-                printToFeed(rep['message'],rep['userID'],rep['service']);
+                printToFeed(rep['message'],rep['username'],rep['service']);
             }
             else if(rep['service'] !== "LiveFeed") {
                 var spt = rep['message'].split('^');
-                // console.log(spt);
+                //console.log(spt);
                 printToFeed(spt[1],spt[0],rep['service']);
             }
             else {
-                printToFeed(rep['message'],rep['userID'],rep['service']);
+                printToFeed(rep['message'],rep['username'],rep['service']);
             }
         }
 
-        function onError(evt)
-        {
+        function onError(evt) {
             writeToScreen('<span style="color: red;">ERROR:</span> ' + evt.data);
         }   
 
         async function postFormDataAsJson({ url, formData }) {
             const plainFormData = Object.fromEntries(formData.entries());
             const formDataJsonString = JSON.stringify(plainFormData);
-            //(formDataJsonString)
+            //alert(formDataJsonString)
             const fetchOptions = {
                 method: "POST",
                 headers: {
@@ -352,7 +338,7 @@
                     user = v['username@'];
                     $('#userlabel').text(user);
                     initWebSocket(v['username@']);
-                }           
+                }
             } catch (error) {
                 alert("error: " + error)
                 console.error(error);
@@ -375,7 +361,6 @@
                     show('loginpage','registerpage');
                     $('#loginerror').text('');
                     $('#registererror').text('');
-                    $(this).addClass('active');
                 }           
             } catch (error) {
                 console.error(error);
@@ -383,8 +368,8 @@
         }
 
         function clearFields() {
-            //$("#tweetform")[0].reset();
-            //$("#searchform")[0].reset();
+            $("#tweetForm")[0].reset();
+            $("#searchForm")[0].reset();
             $("#followForm")[0].reset();
         }
 
@@ -397,7 +382,7 @@
                 formData.append('username', user);
                 const responseData = await postFormDataAsJson({ url, formData });
                 var v = JSON.parse(responseData);
-                //clearFields();
+                clearFields();
                 if(v['code@'] !== "OK") {
                     // console.log("NOT OK");
                     alert(v['message@']);
@@ -416,19 +401,8 @@
                 }               
             } catch (error) {
                 console.error(error);
-            }                
+            }
         }
-
-        const loginForm = document.getElementById('loginForm');
-        loginForm.addEventListener('submit', handleLogin);
-
-        const registerForm = document.getElementById('registerForm');
-        registerForm.addEventListener('submit', handleRegistration);
-
-        const followForm = document.getElementById("followForm");
-        followForm.addEventListener("submit", handleFormSubmit);
-
-        /* // TODO
 
         async function GetQueryJson({ url }) {
             const fetchOptions = {
@@ -466,11 +440,21 @@
                 console.error(error);
             }                
         }
-        
-        const tweetForm = document.getElementById("tweetform");
+
+        const loginForm = document.getElementById('loginForm');
+        loginForm.addEventListener('submit', handleLogin);
+
+        const registerForm = document.getElementById('registerForm');
+        registerForm.addEventListener('submit', handleRegistration);
+
+        const followForm = document.getElementById("followForm");
+        followForm.addEventListener("submit", handleFormSubmit);
+
+        const tweetForm = document.getElementById("tweetForm");
         tweetForm.addEventListener("submit", handleFormSubmit);
-        const searchForm = document.getElementById("searchform");
-        searchForm.addEventListener("submit", handleQuerySubmit);*/
+
+        const searchForm = document.getElementById("searchForm");
+        searchForm.addEventListener("submit", handleQuerySubmit);
     </script>
 </body>
 </html>
