@@ -131,13 +131,13 @@
                 <input type="password" name="value" id="username" tabindex="2" class="form-control" placeholder="Password" value="" required>
             </div>
             <div class="container">
-                <span id="loginError"></span>
-            </div>
-            <div class="container">
                 <label>Public Key : </label>
                 <input type="text" name="pkey" id="username" tabindex="3" class="form-control" placeholder="pkey" value="" required>
             </div>
-            <button type="submit" tabindex="3">Login</button>
+            <div class="container">
+                <span id="loginError"></span>
+            </div>
+            <button type="submit" tabindex="4">Login</button>
         </form>
     </div>
 
@@ -158,13 +158,13 @@
                 <input type="password" name="value" id="username" tabindex="2" class="form-control" placeholder="Password" value="" required>
             </div>
             <div class="container">
-                <span id="registrationError"></span>
-            </div>
-            <div class="container">
                 <label>Public Key : </label>
                 <input type="text" name="pkey" id="username" tabindex="3" class="form-control" placeholder="pkey" value="" required>
             </div>
-            <button type="submit" tabindex="3">Register</button>
+            <div class="container">
+                <span id="registrationError"></span>
+            </div>
+            <button type="submit" tabindex="4">Register</button>
         </form>
     </div>
 
@@ -175,7 +175,7 @@
             <a class="active">Home</a>
         </div>
         
-        <div><h2> Logged in as </h2><h2 id="userlabel"></h2></div>
+        <div><h2> Logged in as </h2><h2 id="user"></h2></div>
 
          <div class="row" style="display:block; width:100%;">
              <div style="width:50%; float: left; display: inline-block;" style="background-color:#aaa;">
@@ -251,17 +251,17 @@
                 $("#feedResults").prepend(something);
             }
             else if(ser === "Feed") {
-                alert(msg);
+                //alert(msg);
                 var splitmsgs = msg.split('-');
                 for (var i =1; i< splitmsgs.length; i++) {
-                    alert(splitmsgs[i]);
+                    //alert(splitmsgs[i]);
                     var insSplit = splitmsgs[i].split('^')
-                    var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
+                    var something = "<li class='list-group-item'><div class='feed'><span class='user'>" + insSplit[0] + "</span><br><span class='tweet'>" + insSplit[1] + "</span></div></li>";    
                     $("#feedResults").prepend(something);
                 } 
             }
             else {
-                var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + uid + "</span><br><span class='tweetlabel'>" + msg + "</span></div></li>"; 
+                var something = "<li class='list-group-item'><div class='feed'><span class='user'>" + uid + "</span><br><span class='tweet'>" + msg + "</span></div></li>"; 
                 $("#feedResults").prepend(something);
             }
         }
@@ -327,7 +327,7 @@
                 } else {
                     show('homePage', 'loginPage');
                     user = v['username@'];
-                    $('#userlabel').text(user);
+                    $('#user').text(user);
                     initWebSocket(v['username@']);
                 }
             } catch (error) {
@@ -342,6 +342,7 @@
             try {
                 const formData = new FormData(form);
                 const responseData = await postFormDataAsJson({ url, formData });
+                //alert(formData.username)
                 var v = JSON.parse(responseData);
                 if(v['code@'] === "FAIL") {
                     $('#registrationError').text(v['message@']);
@@ -370,10 +371,10 @@
                 //console.log(splitmsgs[i]);
                 var insSplit = splitmsgs[i].split('^')
                 if(insSplit.length > 1) {
-                    var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
+                    var something = "<li class='list-group-item'><div class='feed'><span class='user'>" + insSplit[0] + "</span><br><span class='tweet'>" + insSplit[1] + "</span></div></li>";    
                 }
                 else {
-                    var something = "<li class='list-group-item'><div class='feed'><span class='tweetlabel'>" + insSplit[0] + "</span></div></li>";    
+                    var something = "<li class='list-group-item'><div class='feed'><span class='tweet'>" + insSplit[0] + "</span></div></li>";    
                 }
                 $("#searchResults").append(something);
             } 
