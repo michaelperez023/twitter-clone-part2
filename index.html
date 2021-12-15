@@ -113,12 +113,12 @@
 </head>
 <body>
     <center> <h1> Twitter Clone </h1> </center>
-    <div id="loginpage" class="container">
+    <div id="loginPage" class="container">
         <div class="topnav">
             <a class="active">Login</a>
-            <a onclick="return show('registerpage','loginpage');">Register</a>
+            <a onclick="return show('registrationPage','loginPage');">Register</a>
             <a onclick="alert('You must login before visiting the Home page.');">Home</a>
-            <!--<a onclick="return show('homepage','loginpage');">Home</a>-->
+            <!--<a onclick="return show('homepage','loginPage');">Home</a>-->
         </div>
 
         <form id="loginForm" action="http://localhost:8080/login" method="post" role="form">
@@ -131,20 +131,20 @@
                 <input type="password" name="value" id="username" tabindex="2" class="form-control" placeholder="Password" value="" required>
             </div>
             <div class="container">
-                <span id="loginerror"></span>
+                <span id="loginError"></span>
             </div>
             <button type="submit" tabindex="3">Login</button>
         </form>
     </div>
 
-    <div id="registerpage" class="container" style="display:none">
+    <div id="registrationPage" class="container" style="display:none">
         <div class="topnav">
-            <a onclick="return show('loginpage','registerpage');">Login</a>
+            <a onclick="return show('loginPage','registrationPage');">Login</a>
             <a class="active">Register</a>
             <a onclick="alert('You must login before visiting the Home page.');">Home</a>
         </div>
 
-        <form id="registerForm" action="http://localhost:8080/register" method="post" role="form">
+        <form id="registrationForm" action="http://localhost:8080/register" method="post" role="form">
             <div class="container">
                 <label>Username : </label>
                 <input type="text" name="username" id="username" tabindex="1" class="form-control" placeholder="Username" value="" required>
@@ -154,16 +154,16 @@
                 <input type="password" name="value" id="username" tabindex="2" class="form-control" placeholder="Password" value="" required>
             </div>
             <div class="container">
-                <span id="registererror"></span>
+                <span id="registrationError"></span>
             </div>
             <button type="submit" tabindex="3">Register</button>
         </form>
     </div>
 
-    <div id="homepage" class="container" style="display:none">
+    <div id="homePage" class="container" style="display:none">
         <div class="topnav">
-            <a onclick="return show('loginpage','homepage');">Login</a>
-            <a onclick="return show('registerpage','homepage');">Register</a>
+            <a onclick="return show('loginPage','homePage');">Login</a>
+            <a onclick="return show('registrationPage','homePage');">Register</a>
             <a class="active">Home</a>
         </div>
         
@@ -200,7 +200,7 @@
                         </label>
                     </form>
                     <div class="w3-panel w3-blue w3-card-4">
-                        <ul id="searchresults" class="list-group">
+                        <ul id="searchResults" class="list-group">
                         </ul>
                     </div>
                 </div>
@@ -211,7 +211,7 @@
              <div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
                  <h3>Feed</h3>
                  <div class="w3-panel w3-blue w3-card-4">
-                     <ul id="feedresults" class="list-group"></ul>
+                     <ul id="feedResults" class="list-group"></ul>
                  </div>
              </div>
          </div>
@@ -220,7 +220,7 @@
 
     <script>
         function initWebSocket(username) {
-            websocket = new WebSocket("ws://localhost:8080/livefeed");
+            websocket = new WebSocket("ws://localhost:8080/feed");
             websocket.onopen = function(evt) { onOpen(evt, username) };
             websocket.onclose = function(evt) { onClose(evt) };
             websocket.onmessage = function(evt) { onMessage(evt) };
@@ -235,44 +235,27 @@
         }
 
         function printToFeed(msg, uid, ser) {
-            if($("#feedresults li").length === 1 && $($(".feed"),"li:eq(0)",$("#feedresults"))[0].innerText === "No feeds yet!!") {
-                $("#feedresults").empty();
+            if($("#feedResults li").length === 1 && $($(".feed"),"li:eq(0)",$("#feedResults"))[0].innerText === "No tweets in feed yet.") {
+                $("#feedResults").empty();
             }
             if(ser === "Follow") {
                 var something = "<li class='list-group-item'><div class='feed'>" + msg + "</div></li>";
-                $("#feedresults").prepend(something);
+                $("#feedResults").prepend(something);
             }
-            else if(ser === "LiveFeed") {
-                //console.log(msg);
+            else if(ser === "Feed") {
+                alert(msg);
                 var splitmsgs = msg.split('-');
                 for (var i =1; i< splitmsgs.length; i++) {
-                    //console.log(splitmsgs[i]);
+                    alert(splitmsgs[i]);
                     var insSplit = splitmsgs[i].split('^')
                     var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
-                    $("#feedresults").prepend(something);
+                    $("#feedResults").prepend(something);
                 } 
             }
             else {
                 var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + uid + "</span><br><span class='tweetlabel'>" + msg + "</span></div></li>"; 
-                $("#feedresults").prepend(something);
+                $("#feedResults").prepend(something);
             }
-        }
-
-        function printToQuery(msg, uid, ser) {
-            //console.log(msg);
-            $("#searchresults").empty();
-            var splitmsgs = msg.split('-');
-            for (var i =1; i< splitmsgs.length; i++) {
-                //console.log(splitmsgs[i]);
-                var insSplit = splitmsgs[i].split('^')
-                if(insSplit.length > 1) {
-                    var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
-                }
-                else {
-                    var something = "<li class='list-group-item'><div class='feed'><span class='tweetlabel'>" + insSplit[0] + "</span></div></li>";    
-                }
-                $("#searchresults").append(something);
-            } 
         }
 
         function onClose(evt)
@@ -286,15 +269,15 @@
             var rep = JSON.parse(evt.data);
             //console.log(rep);
             if(rep['service'] === "Follow") {
-                printToFeed(rep['message'],rep['username'],rep['service']);
+                printToFeed(rep['message'], rep['username'], rep['service']);
             }
-            else if(rep['service'] !== "LiveFeed") {
+            else if(rep['service'] !== "Feed") {
                 var spt = rep['message'].split('^');
                 //console.log(spt);
-                printToFeed(spt[1],spt[0],rep['service']);
+                printToFeed(spt[1],spt[0], rep['service']);
             }
             else {
-                printToFeed(rep['message'],rep['username'],rep['service']);
+                printToFeed(rep['message'], rep['username'], rep['service']);
             }
         }
 
@@ -317,7 +300,6 @@
             const response = await fetch(url, fetchOptions);
             if (!response.ok) {
                 const errorMessage = await response.text();
-                alert("error: " + errorMessage);
                 throw new Error(errorMessage);
             }
 	        return response.json();
@@ -331,16 +313,16 @@
                 const formData = new FormData(form);
                 const responseData = await postFormDataAsJson({ url, formData });
                 var v = JSON.parse(responseData);
-                if(v['code@'] !== "OK") {
-                    $('#loginerror').text(v['message@']);
+                if(v['code@'] === "FAIL") {
+                    $('#loginError').text(v['message@']);
+                    $("#loginForm")[0].reset();
                 } else {
-                    show('homepage', 'loginpage');
+                    show('homePage', 'loginPage');
                     user = v['username@'];
                     $('#userlabel').text(user);
                     initWebSocket(v['username@']);
                 }
             } catch (error) {
-                alert("error: " + error)
                 console.error(error);
             }
         }
@@ -353,14 +335,13 @@
                 const formData = new FormData(form);
                 const responseData = await postFormDataAsJson({ url, formData });
                 var v = JSON.parse(responseData);
-                if(v['code@'] !== "OK") {
-                    $('#registererror').text(v['message@']);
+                if(v['code@'] === "FAIL") {
+                    $('#registrationError').text(v['message@']);
                 } else {
-                    $("#loginForm")[0].reset();
-                    $("#registerForm")[0].reset();
-                    show('loginpage','registerpage');
-                    $('#loginerror').text('');
-                    $('#registererror').text('');
+                    $("#registrationForm")[0].reset();
+                    show('loginPage','registrationPage');
+                    $('#loginError').text('');
+                    $('#registrationError').text('');
                 }           
             } catch (error) {
                 console.error(error);
@@ -373,6 +354,23 @@
             $("#followForm")[0].reset();
         }
 
+        function printToQuery(msg, uid, ser) {
+            //console.log(msg);
+            $("#searchResults").empty();
+            var splitmsgs = msg.split('-');
+            for (var i = 1; i < splitmsgs.length; i++) {
+                //console.log(splitmsgs[i]);
+                var insSplit = splitmsgs[i].split('^')
+                if(insSplit.length > 1) {
+                    var something = "<li class='list-group-item'><div class='feed'><span class='userlabel'>" + insSplit[0] + "</span><br><span class='tweetlabel'>" + insSplit[1] + "</span></div></li>";    
+                }
+                else {
+                    var something = "<li class='list-group-item'><div class='feed'><span class='tweetlabel'>" + insSplit[0] + "</span></div></li>";    
+                }
+                $("#searchResults").append(something);
+            } 
+        }
+
         async function handleFormSubmit(event) {
             event.preventDefault();
             const form = event.currentTarget;
@@ -383,8 +381,7 @@
                 const responseData = await postFormDataAsJson({ url, formData });
                 var v = JSON.parse(responseData);
                 clearFields();
-                if(v['code@'] !== "OK") {
-                    // console.log("NOT OK");
+                if(v['code@'] === "FAIL") {
                     alert(v['message@']);
                 }
                 else {
@@ -430,7 +427,7 @@
                 url = url + "/" + formData.get('value');
                 const v = await GetQueryJson({ url });
                 clearFields();
-                if(v['code'] !== "OK") {
+                if(v['code'] === "FAIL") {
                     window.alert(v['message']);
                 }
                 else {
@@ -444,8 +441,8 @@
         const loginForm = document.getElementById('loginForm');
         loginForm.addEventListener('submit', handleLogin);
 
-        const registerForm = document.getElementById('registerForm');
-        registerForm.addEventListener('submit', handleRegistration);
+        const registrationForm = document.getElementById('registrationForm');
+        registrationForm.addEventListener('submit', handleRegistration);
 
         const followForm = document.getElementById("followForm");
         followForm.addEventListener("submit", handleFormSubmit);
