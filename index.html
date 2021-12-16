@@ -198,12 +198,22 @@
                         </label>
                     </form>
                 </div>
+
+                <h3>Unfollow</h3>
+                <div class="card">
+                    <form id="unfollowForm" class="form-horizontal" action="http://localhost:8080/unfollow" method="post" role="form">
+                        <label class="input">
+                            <input class="form-control" placeholder="Type username here (without '@')" type="text" name="value" required>
+                            <button class="btn" type="submit" name="unfollow-button">Follow</button>
+                        </label>
+                    </form>
+                </div>
                 
                 <h3>Search Mention</h3>
                 <div class="card">
                     <form id="searchMentionForm" class="form" action="http://localhost:8080/searchMention" method="post" role="form">
                         <label class="input">
-                            <input class="form-control" placeholder="Type username here  (without '@')" type="text" name="value" required>
+                            <input class="form-control" placeholder="Type username here  (with or without '@')" type="text" name="value" required>
                             <button class="btn" type="submit" name="search-button">Search</button>
                         </label>
                     </form>
@@ -219,7 +229,7 @@
                     </form>
                 </div>
 
-                <button class="logout" type="submit" onClick="window.location.reload();">Logout</button>
+                <button class="logout" type="submit" onClick="location.reload();">Logout</button>
              </div>
 
              <div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
@@ -247,57 +257,51 @@
             websocket.onerror = function(evt) { onError(evt) };
         }
 
-        function onOpen(evt, uid) {
-            websocket.send(JSON.stringify({
-                'username': uid,
-                'value': ""
-            }));
+        function onOpen(evt, username) {
+            websocket.send(JSON.stringify({'username': username, 'value': ""}));
         }
 
-        function printToFeed(msg, uid, ser) {
-            if($("#feedResults li").length === 1 && $($(".feed"),"li:eq(0)",$("#feedResults"))[0].innerText === "No tweets in feed yet.") {
+        function printFeed(msg, username, action) {
+            if($("#feedResults li").length === 1 && $($(".feed"),"li:eq(0)", $("#feedResults"))[0].innerText === "Nothing in feed yet.") {
                 $("#feedResults").empty();
             }
-            if(ser === "Follow") {
-                var something = "<li class='list-group-item'><div class='feed'>" + msg + "</div></li>";
-                $("#feedResults").prepend(something);
+
+            if($("#searchResults li").length === 0) {
+                var temp = "No search results yet."
+                var item2 = "<li class='list-group-item'><div class='feed'>" + temp + "</div></li>";
+                $("#searchResults").prepend(item2);
             }
-            else if(ser === "Feed") {
-                //alert(msg);
-                var splitmsgs = msg.split('&');
-                for (var i =1; i< splitmsgs.length; i++) {
-                    //alert(splitmsgs[i]);
-                    var insSplit = splitmsgs[i].split('$')
-                    var something = "<li class='list-group-item'><div class='feed'><span class='user'>" + insSplit[0] + "</span><br><span class='tweet'>" + insSplit[1] + "</span></div></li>";    
-                    $("#feedResults").prepend(something);
+
+            if(action === "Follow") {
+                var item = "<li class='list-group-item'><div class='feed'>" + msg + "</div></li>"; // TODO edit this html
+                $("#feedResults").prepend(item);
+            } else if(action === "Feed") {
+                var msgSplit = msg.split('&');
+                for (var i = 1; i < msgSplit.length; i++) {
+                    var msgParts = msgSplit[i].split('$')
+                    var item = "<li class='list-group-item'><div class='feed'><span class='user'>" + msgParts[0] + "</span><br><span class='tweet'>" + msgParts[1] + "</span></div></li>";    
+                    $("#feedResults").prepend(item);
                 } 
-            }
-            else {
-                var something = "<li class='list-group-item'><div class='feed'><span class='user'>" + uid + "</span><br><span class='tweet'>" + msg + "</span></div></li>"; 
-                $("#feedResults").prepend(something);
+            } else {
+                var item = "<li class='list-group-item'><div class='feed'><span class='user'>" + username + "</span><br><span class='tweet'>" + msg + "</span></div></li>"; 
+                $("#feedResults").prepend(item);
             }
         }
 
-        function onClose(evt)
-        {
+        function onClose(evt) {
             websocket.close();
-            window.location.reload();
+            location.reload();
         }
 
-        function onMessage(evt)
-        {
-            var rep = JSON.parse(evt.data);
-            //console.log(rep);
-            if(rep['action'] === "Follow") {
-                printToFeed(rep['message'], rep['username'], rep['action']);
-            }
-            else if(rep['action'] !== "Feed") {
-                var spt = rep['message'].split('$');
-                //console.log(spt);
-                printToFeed(spt[1],spt[0], rep['action']);
-            }
-            else {
-                printToFeed(rep['message'], rep['username'], rep['action']);
+        function onMessage(evt) {
+            var parsed = JSON.parse(evt.data);
+            if(parsed['action'] === "Follow") {
+                printFeed(parsed['message'], parsed['username'], parsed['action']);
+            } else if(parsed['action'] !== "Feed") {
+                var msgPartArray = parsed['message'].split('$');
+                printFeed(msgPartArray[1], msgPartArray[0], parsed['action']);
+            } else {
+                printFeed(parsed['message'], parsed['username'], parsed['action']);
             }
         }
 
@@ -305,17 +309,16 @@
             writeToScreen('<span style="color: red;">ERROR:</span> ' + evt.data);
         }   
 
-        async function postFormDataAsJson({ url, formData }) {
-            const plainFormData = Object.fromEntries(formData.entries());
-            const formDataJsonString = JSON.stringify(plainFormData);
-            //alert(formDataJsonString)
+        async function sendAndWaitForResponse({ url, formData }) {
+            const formString = JSON.stringify(Object.fromEntries(formData.entries()));
+            //alert(formString)
             const fetchOptions = {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                 },
-                body: formDataJsonString,
+                body: formString,
             };
             const response = await fetch(url, fetchOptions);
             if (!response.ok) {
@@ -325,13 +328,13 @@
 	        return response.json();
         }
 
-        async function handleLogin(event) {
+        async function login(event) {
             event.preventDefault();
             const form = event.currentTarget;
             const url = form.action;
             try {
                 const formData = new FormData(form);
-                const responseData = await postFormDataAsJson({ url, formData });
+                const responseData = await sendAndWaitForResponse({ url, formData });
                 var v = JSON.parse(responseData);
                 if(v['ack@'] === "FAIL") {
                     $('#loginError').text(v['message@']);
@@ -347,17 +350,16 @@
             }
         }
 
-        async function handleRegistration(event) {
+        async function register(event) {
             event.preventDefault();
             const form = event.currentTarget;
             const url = form.action;
             try {
                 const formData = new FormData(form);
-                const responseData = await postFormDataAsJson({ url, formData });
-                //alert(formData.username)
-                var v = JSON.parse(responseData);
-                if(v['code@'] === "FAIL") {
-                    $('#registrationError').text(v['message@']);
+                const responseData = await sendAndWaitForResponse({ url, formData });
+                var parsed = JSON.parse(responseData);
+                if(parsed['ack@'] === "FAIL") {
+                    $('#registrationError').text(parsed['message@']);
                 } else {
                     $("#registrationForm")[0].reset();
                     show('loginPage','registrationPage');
@@ -369,53 +371,47 @@
             }
         }
 
-        function clearFields() {
+        function clearForms() {
             $("#tweetForm")[0].reset();
             $("#searchMentionForm")[0].reset();
             $("#searchHashtagForm")[0].reset();
             $("#followForm")[0].reset();
         }
 
-        function printToSearch(msg, uid, ser) {
-            //console.log(msg);
+        function printSearchResults(msg, username, ser) {
             $("#searchResults").empty();
-            var splitmsgs = msg.split('&');
-            for (var i = 1; i < splitmsgs.length; i++) {
-                //console.log(splitmsgs[i]);
-                var insSplit = splitmsgs[i].split('$')
-                if(insSplit.length > 1) {
-                    var something = "<li class='list-group-item'><div class='feed'><span class='user'>" + insSplit[0] + "</span><br><span class='tweet'>" + insSplit[1] + "</span></div></li>";    
+            var msgSplit = msg.split('&');
+            for (var i = 1; i < msgSplit.length; i++) {
+                var msgPartArray = msgSplit[i].split('$')
+                if(msgPartArray.length > 1) {
+                    var item = "<li class='list-group-item'><div class='feed'><span class='user'>" + msgPartArray[0] + "</span><br><span class='tweet'>" + msgPartArray[1] + "</span></div></li>";    
+                } else {
+                    var item = "<li class='list-group-item'><div class='feed'><span class='tweet'>" + msgPartArray[0] + "</span></div></li>";    
                 }
-                else {
-                    var something = "<li class='list-group-item'><div class='feed'><span class='tweet'>" + insSplit[0] + "</span></div></li>";    
-                }
-                $("#searchResults").append(something);
-            } 
+                $("#searchResults").append(item);
+            }
         }
 
-        async function handleFormSubmit(event) {
+        async function tweetOrFollowOrUnfollow(event) {
             event.preventDefault();
             const form = event.currentTarget;
             const url = form.action;
             try {
                 const formData = new FormData(form);
                 formData.append('username', user);
-                const responseData = await postFormDataAsJson({ url, formData });
-                var v = JSON.parse(responseData);
-                clearFields();
-                if(v['ack@'] === "FAIL") {
-                    alert(v['message@']);
-                }
-                else {
-                    if(v['action@'] === "Follow") {
-                        printToFeed(v['message@'], v['username@'], v['action@']);
-                    }
-                    else if(v['action@'] !== "Search") {
-                        var temp = v['message@'].split('$');
-                        printToFeed(temp[1], temp[0], v['action@']);
-                    }
-                    else {
-                        printToSearch(v['message@'], v['username@'], v['action@']);
+                const responseData = await sendAndWaitForResponse({ url, formData });
+                var parsed = JSON.parse(responseData);
+                clearForms();
+                if(parsed['ack@'] === "FAIL") {
+                    alert(parsed['message@']);
+                } else {
+                    if(parsed['action@'] === "Follow") {
+                        printFeed(parsed['message@'], parsed['username@'], parsed['action@']);
+                    } else if(parsed['action@'] !== "Search") {
+                        var temp = parsed['message@'].split('$');
+                        printFeed(temp[1], temp[0], parsed['action@']);
+                    } else {
+                        printSearchResults(parsed['message@'], parsed['username@'], parsed['action@']);
                     }
                 }               
             } catch (error) {
@@ -439,21 +435,19 @@
 	        return response.json();
         }
 
-        async function handleSearchSubmit(event) {
+        async function search(event) {
             event.preventDefault();
             const form = event.currentTarget;
             var url = form.action;
             try {
                 const formData = new FormData(form);
-                // formData.append('username',user);
                 url = url + "/" + formData.get('value');
-                const v = await GetSearchJson({ url });
-                clearFields();
-                if(v['ack'] === "FAIL") {
-                    window.alert(v['message']);
-                }
-                else {
-                    printToSearch(v['message'], v['username'], v['action']);
+                const results = await GetSearchJson({ url });
+                clearForms();
+                if(results['ack'] === "FAIL") {
+                    alert(v['message']);
+                } else {
+                    printSearchResults(results['message'], results['username'], results['action']);
                 }               
             } catch (error) {
                 console.error(error);
@@ -461,22 +455,19 @@
         }
 
         const loginForm = document.getElementById('loginForm');
-        loginForm.addEventListener('submit', handleLogin);
-
         const registrationForm = document.getElementById('registrationForm');
-        registrationForm.addEventListener('submit', handleRegistration);
-
         const followForm = document.getElementById("followForm");
-        followForm.addEventListener("submit", handleFormSubmit);
-
+        const unfollowForm = document.getElementById("unfollowForm");
         const tweetForm = document.getElementById("tweetForm");
-        tweetForm.addEventListener("submit", handleFormSubmit);
-
         const searchMentionForm = document.getElementById("searchMentionForm");
-        searchMentionForm.addEventListener("submit", handleSearchSubmit);
-
         const searchHashtagForm = document.getElementById("searchHashtagForm");
-        searchHashtagForm.addEventListener("submit", handleSearchSubmit);
+        loginForm.addEventListener('submit', login);
+        registrationForm.addEventListener('submit', register);
+        followForm.addEventListener("submit", tweetOrFollowOrUnfollow);
+        unfollowForm.addEventListener("submit", tweetOrFollowOrUnfollow);
+        tweetForm.addEventListener("submit", tweetOrFollowOrUnfollow);
+        searchMentionForm.addEventListener("submit", search);
+        searchHashtagForm.addEventListener("submit", search);
     </script>
 </body>
 </html>
