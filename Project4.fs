@@ -1,6 +1,6 @@
 // Authors: Michael Perez and Blas Kojusner
 // sources used: https://github.com/SuaveIO/suave/tree/master/examples/WebSocket
-// TODO add source about security
+// RSA source used: http://www.fssnip.net/7WE/title/RSA-encryptiondecryption
 open Akka.FSharp
 open Akka.Actor
 open Suave
@@ -147,17 +147,17 @@ let mutable usernameFollowersSetMap = Map.empty
 let mutable hashtagTweetsListMap = Map.empty
 let mutable usernameMentionsListMap = Map.empty
 
-let rsa = new RSACryptoServiceProvider(2048) // TODO add comments, do security part
-let publicPrivateKeyXML = rsa.ToXmlString(true)
-rsa.FromXmlString(publicPrivateKeyXML)
-let publicKey = rsa.ExportParameters(false)
-let privateKey = rsa.ExportParameters(true)
+let rsa = new RSACryptoServiceProvider(2048) // Create new object with RSA library
+let publicPrivateKeyXML = rsa.ToXmlString(true) // Obtain object with randomly generated public and private keys
+rsa.FromXmlString(publicPrivateKeyXML) // Format the public and private key parts of the object in XML
+let publicKey = rsa.ExportParameters(false) // Export rsa object with just public key
+let privateKey = rsa.ExportParameters(true) // Export rsa object with public and private key
 
 let registerUser input =
     let mutable response = ""
     if not (usernameEncryptedPasswordMap.ContainsKey input.username) then // the username is not registered already, valid request
-        let plainTextArray = System.Text.Encoding.ASCII.GetBytes(input.value)
-        let cipherArray = RsaEncrypt plainTextArray (publicKey) false // TODO add comments about security part
+        let plainTextArray = System.Text.Encoding.ASCII.GetBytes(input.value) // Convert input password into bytes
+        let cipherArray = RsaEncrypt plainTextArray (publicKey) false // Send input password into the RsaEncrypt function
 
         usernameEncryptedPasswordMap <- Map.add input.username cipherArray usernameEncryptedPasswordMap
         usernameFollowersSetMap <- Map.add input.username Set.empty usernameFollowersSetMap
@@ -170,8 +170,8 @@ let registerUser input =
 let loginUser input =
     let mutable response = ""
     if usernameEncryptedPasswordMap.ContainsKey input.username then // username is registered, valid request
-        let decryptedTextArray = RsaDecrypt (usernameEncryptedPasswordMap.[input.username]) (privateKey) false
-        let decryptedText = System.Text.Encoding.ASCII.GetString(decryptedTextArray) // TODO add comments
+        let decryptedTextArray = RsaDecrypt (usernameEncryptedPasswordMap.[input.username]) (privateKey) false // Send the password found on the map to be decrypted
+        let decryptedText = System.Text.Encoding.ASCII.GetString(decryptedTextArray) // Convert the now decrypted password from the database into a string
 
         if input.value = decryptedText then
             response <- {username = input.username; message = "@" + input.username + " logged in."; action = "Login"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
