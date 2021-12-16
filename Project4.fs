@@ -102,15 +102,16 @@ let FeedActor (mailbox:Actor<_>) =
             let jsonResponse = Json.serialize ({username = username; message = msg; action = act; ack = "OK"})
             socketSender.Post (jsonResponse, userWebSocket)
         | UpdateUserFeeds(username, msg) ->
-            for user in usernameFollowersSetMap.[username] do // for each of the user's followers
-                if usernameFollowersSetMap.ContainsKey user then // if the follower is registered
-                    if onlineUsernameWebSocketMap.ContainsKey user then // if the follower is online
-                        let jsonResponse = Json.serialize ({username = user; message = "@" + username + " tweeted:$" + msg; action = "Tweet"; ack = "OK"})
-                        socketSender.Post (jsonResponse, onlineUsernameWebSocketMap.[user])
-                    let mutable temp = []
-                    if usernameFeedListMap.ContainsKey user then
-                        temp <- usernameFeedListMap.[user]
-                    usernameFeedListMap <- Map.add user (("@" + username + " tweeted:$" + msg) :: temp) usernameFeedListMap
+            if usernameFollowersSetMap.ContainsKey username then
+                for user in usernameFollowersSetMap.[username] do // for each of the user's followers
+                    if usernameFollowersSetMap.ContainsKey user then // if the follower is registered
+                        if onlineUsernameWebSocketMap.ContainsKey user then // if the follower is online
+                            let jsonResponse = Json.serialize ({username = user; message = "@" + username + " tweeted:$" + msg; action = "Tweet"; ack = "OK"})
+                            socketSender.Post (jsonResponse, onlineUsernameWebSocketMap.[user])
+                        let mutable temp = []
+                        if usernameFeedListMap.ContainsKey user then
+                            temp <- usernameFeedListMap.[user]
+                        usernameFeedListMap <- Map.add user (("@" + username + " tweeted:$" + msg) :: temp) usernameFeedListMap
         | RemoveOnlineUser(username) ->
             onlineUsernameWebSocketMap <- Map.remove username onlineUsernameWebSocketMap
         return! loop()
@@ -198,16 +199,13 @@ let followUser input =
 
 let unfollowUser input =
     let mutable response = ""
-    // input.value user being unfollowed
-    // input.username user doing unfollowing
     if input.value <> input.username then // valid user to unfollow
         if usernameFollowersSetMap.ContainsKey input.value then // user that is being unfollowed is registered
             if usernameFollowersSetMap.[input.value].Contains input.username then // if user follows the user being unfollowed
                 let mutable temp = usernameFollowersSetMap.[input.value]
                 temp <- Set.remove input.username usernameFollowersSetMap.[input.value]
-                usernameFollowersSetMap <- Map.remove input.value temp usernameFollowersSetMap
                 usernameFollowersSetMap <- Map.add input.value temp usernameFollowersSetMap
-                response <- {username = input.username; message = "You unfollowed @" + input.value + "."; action = "Follow"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString    
+                response <- {username = input.username; message = "You unfollowed @" + input.value + "."; action = "Follow"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
             else // the user doesn't follow the user being unfollowed
                 response <- {username = input.username; message = "Invalid request, you are not following @" + input.value + "."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
         else // user is trying to unfollow a user that is not registered, invalid request
