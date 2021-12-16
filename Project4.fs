@@ -1,5 +1,6 @@
 // Authors: Michael Perez and Blas Kojusner
 // sources used: https://github.com/SuaveIO/suave/tree/master/examples/WebSocket
+// TODO add source about security
 open Akka.FSharp
 open Akka.Actor
 open Suave
@@ -57,7 +58,7 @@ let RsaDecrypt (data : byte[]) (key : RSAParameters) (padding : bool) : byte[] =
         printfn "%A" e.Message
         Array.empty  
 
-let socketMailboxProcessor = MailboxProcessor<string * WebSocket>.Start(fun inbox ->
+let socketSender = MailboxProcessor<string * WebSocket>.Start(fun inbox ->
     let rec messageLoop() = async {
         let! msg, webSocket = inbox.Receive()
         let byteRes = msg |> System.Text.Encoding.ASCII.GetBytes|> ByteSegment
@@ -80,8 +81,8 @@ let FeedActor (mailbox:Actor<_>) =
         | FollowUser(username, followedUsername) ->
             if usernameFollowersSetMap.ContainsKey followedUsername then
                 usernameFollowersSetMap <- Map.add followedUsername (Set.add username usernameFollowersSetMap.[followedUsername]) usernameFollowersSetMap
-                let jsonResponse = Json.serialize ({username = followedUsername; message = "@" + username + " started following you."; action = "Follow"; ack = "OK"})
-                socketMailboxProcessor.Post (jsonResponse, onlineUsernameWebSocketMap.[followedUsername])
+                let jsonResponse = Json.serialize ({username = followedUsername; message = "@" + username + " followed you."; action = "Follow"; ack = "OK"})
+                socketSender.Post (jsonResponse, onlineUsernameWebSocketMap.[followedUsername])
         | AddOnlineUser(username, userWebSocket) ->
             onlineUsernameWebSocketMap <- Map.add username userWebSocket onlineUsernameWebSocketMap
             let mutable msg = ""
@@ -90,7 +91,7 @@ let FeedActor (mailbox:Actor<_>) =
             let mutable feedLimit = 10
             if usernameFeedListMap.[username].Length = 0 then // feed for user logging in is empty
                 act <- "Follow"
-                msg <- "No tweets in feed yet."
+                msg <- "Nothing in feed yet."
             else  // feed has tweets
                 if usernameFeedListMap.[username].Length < 10 then // limit feed to 10 tweets
                     feedLimit <- usernameFeedListMap.[username].Length
@@ -99,13 +100,13 @@ let FeedActor (mailbox:Actor<_>) =
                 msg <- feed
                 act <- "Feed"
             let jsonResponse = Json.serialize ({username = username; message = msg; action = act; ack = "OK"})
-            socketMailboxProcessor.Post (jsonResponse, userWebSocket)
+            socketSender.Post (jsonResponse, userWebSocket)
         | UpdateUserFeeds(username, msg) ->
             for user in usernameFollowersSetMap.[username] do // for each of the user's followers
                 if usernameFollowersSetMap.ContainsKey user then // if the follower is registered
                     if onlineUsernameWebSocketMap.ContainsKey user then // if the follower is online
                         let jsonResponse = Json.serialize ({username = user; message = "@" + username + " tweeted:$" + msg; action = "Tweet"; ack = "OK"})
-                        socketMailboxProcessor.Post (jsonResponse, onlineUsernameWebSocketMap.[user])
+                        socketSender.Post (jsonResponse, onlineUsernameWebSocketMap.[user])
                     let mutable temp = []
                     if usernameFeedListMap.ContainsKey user then
                         temp <- usernameFeedListMap.[user]
@@ -116,22 +117,17 @@ let FeedActor (mailbox:Actor<_>) =
     }
     loop()
 
-let feedActor = spawn system ("FeedActor") FeedActor
+let feedActor = spawn system "FeedActor" FeedActor
 
 let feed (webSocket : WebSocket) (context: HttpContext) =
     let rec loop() =
         let mutable user = ""
         socket {
-            // the server will wait for a message to be received without blocking the thread
-            let! msg = webSocket.read()
+            let! msg = webSocket.read() // the server will wait for a message to be received without blocking the thread
             // the message has type (Opcode * byte [] * bool)
-            //
             // Opcode type:
             //   type Opcode = Continuation | Text | Binary | Reserved | Close | Ping | Pong
-            //
-            // byte [] contains the actual message
-            //
-            // the last element is the FIN byte, explained later
+            // byte [] contains the actual message. the last element is the FIN byte
             match msg with
             | (Text, data, true) ->
                 user <- (Json.deserialize<Request> (UTF8.toString data)).username
@@ -191,13 +187,33 @@ let followUser input =
             if not (usernameFollowersSetMap.[input.value].Contains input.username) then // valid user to follow
                 usernameFollowersSetMap <- Map.add input.value (Set.add input.username usernameFollowersSetMap.[input.value]) usernameFollowersSetMap
                 feedActor <! FollowUser(input.username, input.value)
-                response <- {username = input.username; message = "You started following @" + input.value + "."; action = "Follow"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+                response <- {username = input.username; message = "You followed @" + input.value + "."; action = "Follow"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
             else // user is already following the user they are requesting to follow, invalid request
                 response <- {username = input.username; message = "Invalid request, you are already following @" + input.value + "."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
         else // user is trying to follow a user that is not registered, invalid request
             response <- {username = input.username; message = "Invalid request, @" + input.value + " is not registered."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-    else // user is trying to follow themselves, invalid request
-        response <- {username = input.username; message = "Invalid request, you cannot follow yourself."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString    
+    else // user is trying to follow themself, invalid request
+        response <- {username = input.username; message = "Invalid request, you cannot follow yourself."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    response
+
+let unfollowUser input =
+    let mutable response = ""
+    // input.value user being unfollowed
+    // input.username user doing unfollowing
+    if input.value <> input.username then // valid user to unfollow
+        if usernameFollowersSetMap.ContainsKey input.value then // user that is being unfollowed is registered
+            if usernameFollowersSetMap.[input.value].Contains input.username then // if user follows the user being unfollowed
+                let mutable temp = usernameFollowersSetMap.[input.value]
+                temp <- Set.remove input.username usernameFollowersSetMap.[input.value]
+                usernameFollowersSetMap <- Map.remove input.value temp usernameFollowersSetMap
+                usernameFollowersSetMap <- Map.add input.value temp usernameFollowersSetMap
+                response <- {username = input.username; message = "You unfollowed @" + input.value + "."; action = "Follow"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString    
+            else // the user doesn't follow the user being unfollowed
+                response <- {username = input.username; message = "Invalid request, you are not following @" + input.value + "."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+        else // user is trying to unfollow a user that is not registered, invalid request
+            response <- {username = input.username; message = "Invalid request, @" + input.value + " is not registered."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    else // user is trying to unfollow themself, invalid request
+        response <- {username = input.username; message = "Invalid request, you cannot unfollow yourself."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString 
     response
 
 let tweetUser input =
@@ -231,26 +247,26 @@ let tweetUser input =
     response
 
 let searchMention (input:string) =
-  let mutable response = ""
-  let mutable results = ""
-  let mutable resultsLimit = 10
-  let mutable mention = ""
-  if input.Length > 0 then // search is not white space, valid request
-    if input.[0] = '@' then // search starts 
-        mention <- input.[1..(input.Length-1)]
-    else
-        mention <- input
-    if usernameMentionsListMap.ContainsKey mention then
-        if (usernameMentionsListMap.[mention].Length < 10) then
-            resultsLimit <- usernameMentionsListMap.[mention].Length
-        for i in [0..(resultsLimit-1)] do
-            results <- results + "&" + usernameMentionsListMap.[mention].[i]
-        response <- Json.serialize {username = ""; message = results; action = "Search"; ack = "OK"}
-    else
-        response <- Json.serialize {username = ""; message = "Invalid request, no mentions found for @" + mention + "."; action = "Search"; ack = "FAIL"}
-  else // search is white space, invalid request
-    response <- Json.serialize {username = ""; message = "Invalid request, type something to search."; action = "Search"; ack = "FAIL"}
-  response
+    let mutable response = ""
+    let mutable results = ""
+    let mutable resultsLimit = 10
+    let mutable mention = ""
+    if input.Length > 0 then // search is not white space, valid request
+        if input.[0] = '@' then // search starts 
+            mention <- input.[1..(input.Length-1)]
+        else
+            mention <- input
+        if usernameMentionsListMap.ContainsKey mention then
+            if (usernameMentionsListMap.[mention].Length < 10) then
+                resultsLimit <- usernameMentionsListMap.[mention].Length
+            for i in [0..(resultsLimit-1)] do
+                results <- results + "&" + usernameMentionsListMap.[mention].[i]
+            response <- Json.serialize {username = ""; message = results; action = "Search"; ack = "OK"}
+        else
+            response <- Json.serialize {username = ""; message = "Invalid request, no mentions found for @" + mention + "."; action = "Search"; ack = "FAIL"}
+    else // search is white space, invalid request
+        response <- Json.serialize {username = ""; message = "Invalid request, type something to search."; action = "Search"; ack = "FAIL"}
+    response
 
 let searchHashtag (input:string) =
     let mutable response = ""
@@ -283,6 +299,7 @@ let app =
         redirect "login" loginUser
         redirect "register" registerUser
         redirect "follow" followUser
+        redirect "unfollow" unfollowUser
         redirect "tweet" tweetUser
         path "/feed" >=> handShake feed
         pathScan "/searchMention/%s" (fun search -> OK (searchMention search))
