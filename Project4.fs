@@ -1,3 +1,5 @@
+// Authors: Michael Perez and Blas Kojusner
+// sources used: https://github.com/SuaveIO/suave/tree/master/examples/WebSocket
 open Akka.FSharp
 open Akka.Actor
 open Suave
@@ -9,275 +11,282 @@ open Suave.Sockets.Control
 open Suave.WebSocket
 open Newtonsoft.Json
 open FSharp.Json
+open System.Security.Cryptography
+open System.Text
 
 let system = ActorSystem.Create("TwitterServer")
 
-type Response = {   // TODO edit
-  username: string
-  message: string
-  service: string
-  code: string
+type Response = {
+    username: string
+    message: string
+    action: string
+    ack: string
 }
 
-type Request = {   // TODO edit
-  username: string
-  value: string
-}
-
-type RestResource<'a> = {   // TODO edit
-    Entry : Request -> string
+type Request = {
+    username: string
+    value: string
 }
 
 type FeedActorMessages =
-  | RegisterUserWithFeedActor of string
-  | FollowUser of string * string
-  | AddActiveUser of string * WebSocket
-  | RemoveActiveUser of string
-  | UpdateFeed of string * string * string
+    | RegisterUserWithFeedActor of string
+    | FollowUser of string * string
+    | AddOnlineUser of string * WebSocket
+    | RemoveOnlineUser of string
+    | UpdateUserFeeds of string * string
+
+// RSA encryption function
+let RsaEncrypt (data : byte[]) (key : RSAParameters) (padding : bool) : byte[] =
+    try
+        let rsa = new RSACryptoServiceProvider()
+        rsa.ImportParameters(key)
+        rsa.Encrypt(data, padding)
+    with
+    | :? CryptographicException as e ->
+        printfn "%A" e.Message
+        Array.empty
+
+// RSA decryption function
+let RsaDecrypt (data : byte[]) (key : RSAParameters) (padding : bool) : byte[] =
+    try
+        let rsa = new RSACryptoServiceProvider()
+        rsa.ImportParameters(key)
+        rsa.Decrypt(data, padding)
+    with
+    | :? CryptographicException as e ->
+        printfn "%A" e.Message
+        Array.empty  
 
 let socketMailboxProcessor = MailboxProcessor<string * WebSocket>.Start(fun inbox ->
-  let rec messageLoop() = async {
-    let! msg, webSocket = inbox.Receive()
-    let byteRes = msg |> System.Text.Encoding.ASCII.GetBytes|> ByteSegment
-    let! _ = webSocket.send Text byteRes true
-    return! messageLoop()
-  }
-  messageLoop()
+    let rec messageLoop() = async {
+        let! msg, webSocket = inbox.Receive()
+        let byteRes = msg |> System.Text.Encoding.ASCII.GetBytes|> ByteSegment
+        let! _ = webSocket.send Text byteRes true
+        return! messageLoop()
+    }
+    messageLoop()
 )
 
 let FeedActor (mailbox:Actor<_>) = 
-  let mutable usernameFollowersSetMap = Map.empty
-  let mutable activeUsers = Map.empty
-  let mutable usernameFeedListMap = Map.empty
-  let rec loop () = actor {
-      let! message = mailbox.Receive()
-      match message with
-      | RegisterUserWithFeedActor(username) ->
-        usernameFollowersSetMap <- Map.add username Set.empty usernameFollowersSetMap
-        usernameFeedListMap <- Map.add username List.empty usernameFeedListMap
-      | FollowUser(username, followedUsername) ->
-        if usernameFollowersSetMap.ContainsKey followedUsername then
-          usernameFollowersSetMap <- Map.add followedUsername (Set.add username usernameFollowersSetMap.[followedUsername]) usernameFollowersSetMap
-          let mutable jsonData: Response = {username = followedUsername; service= "Follow"; code = "OK"; message = "User " + username + " started following you."}
-          socketMailboxProcessor.Post ((Json.serialize jsonData), activeUsers.[followedUsername])
-      | AddActiveUser(username, userWebSocket) -> // TODO edit
-        activeUsers <- Map.add username userWebSocket activeUsers
-        let mutable feedsPub = ""
-        let mutable serviceType = ""
-        if usernameFeedListMap.ContainsKey username then
-          let mutable feedsTop = ""
-          let mutable feedLength = 10
-          let feedList:List<string> = usernameFeedListMap.[username]
-          if feedList.Length = 0 then
-            serviceType <- "Follow"
-            feedsPub <- "No tweets in feed yet."
-          else
-            if feedList.Length < 10 then
-                feedLength <- feedList.Length
-            // printfn"fsize = %d" fSize
-            for i in [0..(feedLength-1)] do
-              // printfn "feed %d = %s" i usernameFeedListMap.[username].[i]
-              feedsTop <- "-" + usernameFeedListMap.[username].[i] + feedsTop
-
-            feedsPub <- feedsTop
-            serviceType <- "Feed"
-          // printfn "feeds pub = %A" feedsPub
-          let jsonData: Response = {username = username; message = feedsPub; code = "OK"; service = serviceType}
-          let consJson = Json.serialize jsonData
-          socketMailboxProcessor.Post (consJson, userWebSocket)
-      | RemoveActiveUser(username) ->
-        activeUsers <- Map.remove username activeUsers
-      | UpdateFeed(username, tweetMsg, serviceType) ->  // TODO edit
-        if usernameFollowersSetMap.ContainsKey username then
-          let mutable stype = ""
-          if serviceType = "Tweet" then
-            stype <- "User " + username + " tweeted:"
-          for user in usernameFollowersSetMap.[username] do
-            if usernameFollowersSetMap.ContainsKey user then
-              if activeUsers.ContainsKey user then
-                let twt = stype + "^" + tweetMsg
-                let jsonData: Response = {username = user; service=serviceType; code="OK"; message = twt}
-                let consJson = Json.serialize jsonData
-                socketMailboxProcessor.Post (consJson, activeUsers.[user])
-              let mutable listy = []
-              if usernameFeedListMap.ContainsKey user then
-                  listy <- usernameFeedListMap.[user]
-              listy  <- (stype + "^" + tweetMsg) :: listy
-              usernameFeedListMap <- Map.add user listy usernameFeedListMap
-      return! loop()
-  }
-  loop()
+    let mutable usernameFollowersSetMap = Map.empty
+    let mutable onlineUsernameWebSocketMap = Map.empty
+    let mutable usernameFeedListMap = Map.empty
+    let rec loop () = actor {
+        let! message = mailbox.Receive()
+        match message with
+        | RegisterUserWithFeedActor(username) ->
+            usernameFollowersSetMap <- Map.add username Set.empty usernameFollowersSetMap
+            usernameFeedListMap <- Map.add username List.empty usernameFeedListMap
+        | FollowUser(username, followedUsername) ->
+            if usernameFollowersSetMap.ContainsKey followedUsername then
+                usernameFollowersSetMap <- Map.add followedUsername (Set.add username usernameFollowersSetMap.[followedUsername]) usernameFollowersSetMap
+                let jsonResponse = Json.serialize ({username = followedUsername; message = "@" + username + " started following you."; action = "Follow"; ack = "OK"})
+                socketMailboxProcessor.Post (jsonResponse, onlineUsernameWebSocketMap.[followedUsername])
+        | AddOnlineUser(username, userWebSocket) ->
+            onlineUsernameWebSocketMap <- Map.add username userWebSocket onlineUsernameWebSocketMap
+            let mutable msg = ""
+            let mutable act = ""
+            let mutable feed = ""
+            let mutable feedLimit = 10
+            if usernameFeedListMap.[username].Length = 0 then // feed for user logging in is empty
+                act <- "Follow"
+                msg <- "No tweets in feed yet."
+            else  // feed has tweets
+                if usernameFeedListMap.[username].Length < 10 then // limit feed to 10 tweets
+                    feedLimit <- usernameFeedListMap.[username].Length
+                for i in [0..(feedLimit-1)] do
+                    feed <- "&" + usernameFeedListMap.[username].[i] + feed
+                msg <- feed
+                act <- "Feed"
+            let jsonResponse = Json.serialize ({username = username; message = msg; action = act; ack = "OK"})
+            socketMailboxProcessor.Post (jsonResponse, userWebSocket)
+        | UpdateUserFeeds(username, msg) ->
+            for user in usernameFollowersSetMap.[username] do // for each of the user's followers
+                if usernameFollowersSetMap.ContainsKey user then // if the follower is registered
+                    if onlineUsernameWebSocketMap.ContainsKey user then // if the follower is online
+                        let jsonResponse = Json.serialize ({username = user; message = "@" + username + " tweeted:$" + msg; action = "Tweet"; ack = "OK"})
+                        socketMailboxProcessor.Post (jsonResponse, onlineUsernameWebSocketMap.[user])
+                    let mutable temp = []
+                    if usernameFeedListMap.ContainsKey user then
+                        temp <- usernameFeedListMap.[user]
+                    usernameFeedListMap <- Map.add user (("@" + username + " tweeted:$" + msg) :: temp) usernameFeedListMap
+        | RemoveOnlineUser(username) ->
+            onlineUsernameWebSocketMap <- Map.remove username onlineUsernameWebSocketMap
+        return! loop()
+    }
+    loop()
 
 let feedActor = spawn system ("FeedActor") FeedActor
 
-let feed (webSocket : WebSocket) (context: HttpContext) =  // TODO edit
-  let rec loop() =
-    let mutable user = ""
-    socket { 
-      let! msg = webSocket.read()
-      match msg with
-      | (Text, data, true) ->
-        let reqMsg = UTF8.toString data
-        let parsed = Json.deserialize<Request> reqMsg
-        user <- parsed.username
-        feedActor <! AddActiveUser(parsed.username, webSocket)
-        return! loop()
-      | (Close, _, _) ->
-        feedActor <! RemoveActiveUser(user)
-        let emptyResponse = [||] |> ByteSegment
-        do! webSocket.send Close emptyResponse true
-      | _ -> return! loop()
-    }
-  loop()
+let feed (webSocket : WebSocket) (context: HttpContext) =
+    let rec loop() =
+        let mutable user = ""
+        socket {
+            // the server will wait for a message to be received without blocking the thread
+            let! msg = webSocket.read()
+            // the message has type (Opcode * byte [] * bool)
+            //
+            // Opcode type:
+            //   type Opcode = Continuation | Text | Binary | Reserved | Close | Ping | Pong
+            //
+            // byte [] contains the actual message
+            //
+            // the last element is the FIN byte, explained later
+            match msg with
+            | (Text, data, true) ->
+                user <- (Json.deserialize<Request> (UTF8.toString data)).username
+                feedActor <! AddOnlineUser(user, webSocket)
+                return! loop()
+            | (Close, _, _) ->
+                feedActor <! RemoveOnlineUser(user)
+                do! webSocket.send Close ([||] |> ByteSegment) true // send close message to close web socket
+            | _ -> return! loop()
+        }
+    loop()
 
-let mutable usernamePasswordMap = Map.empty
+// global maps for usernames->passswords, users->followers, hashtags->tweets, usernames->mentions
+let mutable usernameEncryptedPasswordMap = Map.empty
 let mutable usernameFollowersSetMap = Map.empty
 let mutable hashtagTweetsListMap = Map.empty
 let mutable usernameMentionsListMap = Map.empty
 
-let loginUser input =
-  let mutable response = ""
-  if usernamePasswordMap.ContainsKey input.username then
-    if usernamePasswordMap.[input.username] = input.value then
-      let rectype: Response = {username = input.username; message = "User " + input.username + " logged in."; service = "Login"; code = "OK"}
-      response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-    else
-      let rectype: Response = {username = input.username; message = "Invalid username and/or password."; service = "Login"; code = "FAIL"}
-      response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-  else
-    let rectype: Response = {username = input.username; message = "Invalid username and/or password."; service = "Login"; code = "FAIL"}
-    response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-  response
+let rsa = new RSACryptoServiceProvider(2048) // TODO add comments, do security part
+let publicPrivateKeyXML = rsa.ToXmlString(true)
+rsa.FromXmlString(publicPrivateKeyXML)
+let publicKey = rsa.ExportParameters(false)
+let privateKey = rsa.ExportParameters(true)
 
 let registerUser input =
-  let mutable response = ""
-  if not (usernamePasswordMap.ContainsKey input.username) then
-    usernamePasswordMap <- Map.add input.username input.value usernamePasswordMap
-    usernameFollowersSetMap <- Map.add input.username Set.empty usernameFollowersSetMap
-    feedActor <! RegisterUserWithFeedActor(input.username)
-    let rectype: Response = {username = input.username; message = "User " + input.username + " registered."; service = "Register"; code = "OK"}
-    response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-  else
-    let rectype: Response = {username = input.username; message = "User " + input.username + " is already registered."; service = "Register"; code = "FAIL"}
-    response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-  response
+    let mutable response = ""
+    if not (usernameEncryptedPasswordMap.ContainsKey input.username) then // the username is not registered already, valid request
+        let plainTextArray = System.Text.Encoding.ASCII.GetBytes(input.value)
+        let cipherArray = RsaEncrypt plainTextArray (publicKey) false // TODO add comments about security part
+
+        usernameEncryptedPasswordMap <- Map.add input.username cipherArray usernameEncryptedPasswordMap
+        usernameFollowersSetMap <- Map.add input.username Set.empty usernameFollowersSetMap
+        feedActor <! RegisterUserWithFeedActor(input.username)
+        response <- {username = input.username; message = "@" + input.username + " registered."; action = "Register"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    else // invalid request, a user with the same username is already registered
+        response <- {username = input.username; message = "Invalid request, @" + input.username + " is already registered."; action = "Register"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    response
+
+let loginUser input =
+    let mutable response = ""
+    if usernameEncryptedPasswordMap.ContainsKey input.username then // username is registered, valid request
+        let decryptedTextArray = RsaDecrypt (usernameEncryptedPasswordMap.[input.username]) (privateKey) false
+        let decryptedText = System.Text.Encoding.ASCII.GetString(decryptedTextArray) // TODO add comments
+
+        if input.value = decryptedText then
+            response <- {username = input.username; message = "@" + input.username + " logged in."; action = "Login"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+        else
+            response <- {username = input.username; message = "Invalid request, wrong username and/or password."; action = "Login"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    else // username is not registered, invalid request
+        response <- {username = input.username; message = "Invalid request, wrong username and/or password."; action = "Login"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    response
 
 let followUser input =
-  let mutable response = ""
-  if input.value <> input.username then
-    if usernameFollowersSetMap.ContainsKey input.value then
-      if not (usernameFollowersSetMap.[input.value].Contains input.username) then
-        usernameFollowersSetMap <- Map.add input.value (Set.add input.username usernameFollowersSetMap.[input.value]) usernameFollowersSetMap
-        feedActor <! FollowUser(input.username, input.value)
-        let rectype: Response = {username = input.username; service="Follow"; message = "You started following user " + input.value + "."; code = "OK"}
-        response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-      else
-        let rectype: Response = {username = input.username; service="Follow"; message = "You are already following user " + input.value + "."; code = "FAIL"}
-        response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-    else
-      let rectype: Response = {username = input.username; service="Follow"; message = "Invalid username, user " + input.value + " is not registered."; code = "FAIL"}
-      response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-  else
-    let rectype: Response = {username = input.username; service="Follow"; message = "You cannot follow yourself."; code = "FAIL"}
-    response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString    
-  response
+    let mutable response = ""
+    if input.value <> input.username then // valid user to follow
+        if usernameFollowersSetMap.ContainsKey input.value then // user that is being followed is registered
+            if not (usernameFollowersSetMap.[input.value].Contains input.username) then // valid user to follow
+                usernameFollowersSetMap <- Map.add input.value (Set.add input.username usernameFollowersSetMap.[input.value]) usernameFollowersSetMap
+                feedActor <! FollowUser(input.username, input.value)
+                response <- {username = input.username; message = "You started following @" + input.value + "."; action = "Follow"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+            else // user is already following the user they are requesting to follow, invalid request
+                response <- {username = input.username; message = "Invalid request, you are already following @" + input.value + "."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+        else // user is trying to follow a user that is not registered, invalid request
+            response <- {username = input.username; message = "Invalid request, @" + input.value + " is not registered."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    else // user is trying to follow themselves, invalid request
+        response <- {username = input.username; message = "Invalid request, you cannot follow yourself."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString    
+    response
 
-let tweetUser input =  // TODO edit
-  let mutable response = ""
-  if usernamePasswordMap.ContainsKey input.username then
-    let mutable hashtag = ""
+let tweetUser input =
+    let mutable response = ""
     let mutable mention = ""
-    let parsed = input.value.Split ' '
-    // printfn "parsed = %A" parsed
-    for parse in parsed do
-      if parse.Length > 0 then
-        if parse.[0] = '#' then
-          hashtag <- parse.[1..(parse.Length-1)]
-        else if parse.[0] = '@' then
-          mention <- parse.[1..(parse.Length-1)]
+    let mutable hashtag = ""
+    for word in (input.value.Split ' ') do // parse tweet and save mention and/or hashtag, if any
+        if word.Length > 0 then
+            if word.[0] = '@' then
+                mention <- word.[1..(word.Length-1)]
+            else if word.[0] = '#' then
+                hashtag <- word.[1..(word.Length-1)]
 
-    if mention <> "" then
-      if usernamePasswordMap.ContainsKey mention then
-        if not (usernameMentionsListMap.ContainsKey mention) then
-            usernameMentionsListMap <- Map.add mention List.empty usernameMentionsListMap
-        usernameMentionsListMap <- Map.add mention (("User " + input.username + " tweeted:^" + input.value) :: usernameMentionsListMap.[mention]) usernameMentionsListMap
-        feedActor <! UpdateFeed(input.username, input.value, "Tweet")
-        let rectype: Response = {username = input.username; service="Tweet"; message = "User " + input.username + " tweeted:^" + input.value; code = "OK"}
-        response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-      else
-        let rectype: Response = {username = input.username; service="Tweet"; message = "Invalid tweet, user " + mention + " is not registered."; code = "FAIL"}
-        response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-    else
-      feedActor <! UpdateFeed(input.username, input.value, "Tweet")
-      let rectype: Response = {username = input.username; service="Tweet"; message = "User " + input.username + " tweeted:^" + input.value; code = "OK"}
-      response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    if hashtag <> "" then // add hashtag to hashtagTweetsListMap
+        if not (hashtagTweetsListMap.ContainsKey hashtag) then
+            hashtagTweetsListMap <- Map.add hashtag List.empty hashtagTweetsListMap
+        hashtagTweetsListMap <- Map.add hashtag (("@" + input.username + " tweeted:$" + input.value) :: hashtagTweetsListMap.[hashtag]) hashtagTweetsListMap
 
-    if hashtag <> "" then
-      if not (hashtagTweetsListMap.ContainsKey hashtag) then
-        hashtagTweetsListMap <- Map.add hashtag List.empty hashtagTweetsListMap
-      hashtagTweetsListMap <- Map.add hashtag (("User " + input.username + " tweeted:^" + input.value) :: hashtagTweetsListMap.[hashtag]) hashtagTweetsListMap
-  else
-    let rectype: Response = {username = input.username; service="Tweet"; message = "Invalid request by user " + input.username + ", that user is not registered yet."; code = "FAIL"}
-    response <- rectype |> Json.toJson |> System.Text.Encoding.UTF8.GetString
-  response
+    if mention <> "" then // add mention to usernameEncryptedPasswordMap, then tweet
+        if usernameEncryptedPasswordMap.ContainsKey mention then // tweet with valid mention
+            if not (usernameMentionsListMap.ContainsKey mention) then
+                usernameMentionsListMap <- Map.add mention List.empty usernameMentionsListMap
+            usernameMentionsListMap <- Map.add mention (("@" + input.username + " tweeted:$" + input.value) :: usernameMentionsListMap.[mention]) usernameMentionsListMap
+            response <- {username = input.username; message = "@" + input.username + " tweeted:$" + input.value; action = "Tweet"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+            feedActor <! UpdateUserFeeds(input.username, input.value)
+        else // mentioned user in tweet is not registered
+            response <- {username = input.username; message = "Invalid request, @" + mention + " is not registered."; action = "Tweet"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    else // tweet without mention
+        feedActor <! UpdateUserFeeds(input.username, input.value)
+        response <- {username = input.username; message = "@" + input.username + " tweeted:$" + input.value; action = "Tweet"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+    response
 
-let query (input:string) =  // TODO edit
+let searchMention (input:string) =
   let mutable response = ""
-  let mutable hashtagsString = ""
-  let mutable mentionsString = ""
-  let mutable size = 10
-  //printfn "input: %s" input
-  if input.Length > 0 then
-    if input.[0] = '@' then
-      let searchKey = input.[1..(input.Length-1)]
-      if usernameMentionsListMap.ContainsKey searchKey then
-        let mapData:List<string> = usernameMentionsListMap.[searchKey]
-        if (mapData.Length < 10) then
-          size <- mapData.Length
-        for i in [0..(size-1)] do
-          mentionsString <- mentionsString + "-" + mapData.[i]
-        let rectype: Response = {username = ""; service="Query"; message = mentionsString; code = "OK"}
-        response <- Json.serialize rectype
-      else
-        let rectype: Response = {username = ""; service="Query"; message = "No mentions found for user " + searchKey + "."; code = "FAIL"}
-        response <- Json.serialize rectype
-    else //if input.[0] = '#' then
-      let searchKey = input
-      if hashtagTweetsListMap.ContainsKey searchKey then
-        let mapData:List<string> = hashtagTweetsListMap.[searchKey]
-        if (mapData.Length < 10) then
-            size <- mapData.Length
-        for i in [0..(size-1)] do
-            hashtagsString <- hashtagsString + "-" + mapData.[i]
-        let rectype: Response = {username = ""; service="Query"; message = hashtagsString; code = "OK"}
-        response <- Json.serialize rectype
-      else
-        let rectype: Response = {username = ""; service="Query"; message = "No tweets found for the hashtag " + searchKey + "."; code = "FAIL"}
-        response <- Json.serialize rectype
-    (*else
-        let rectype: Response = {username = ""; service="Query"; message = "Your query must begin with a # or @."; code = "OK"}
-        response <- Json.serialize rectype*)
-  else
-    let rectype: Response = {username = ""; service="Query"; message = "Type something to search."; code = "FAIL"}
-    response <- Json.serialize rectype
+  let mutable results = ""
+  let mutable resultsLimit = 10
+  let mutable mention = ""
+  if input.Length > 0 then // search is not white space, valid request
+    if input.[0] = '@' then // search starts 
+        mention <- input.[1..(input.Length-1)]
+    else
+        mention <- input
+    if usernameMentionsListMap.ContainsKey mention then
+        if (usernameMentionsListMap.[mention].Length < 10) then
+            resultsLimit <- usernameMentionsListMap.[mention].Length
+        for i in [0..(resultsLimit-1)] do
+            results <- results + "&" + usernameMentionsListMap.[mention].[i]
+        response <- Json.serialize {username = ""; message = results; action = "Search"; ack = "OK"}
+    else
+        response <- Json.serialize {username = ""; message = "Invalid request, no mentions found for @" + mention + "."; action = "Search"; ack = "FAIL"}
+  else // search is white space, invalid request
+    response <- Json.serialize {username = ""; message = "Invalid request, type something to search."; action = "Search"; ack = "FAIL"}
   response
 
-let entryRequest resourceName resource =
-  let serialize input =
-    JsonConvert.SerializeObject((resource.Entry (JsonConvert.DeserializeObject(System.Text.Encoding.UTF8.GetString(input.rawForm), typeof<Request>) :?> Request)), JsonSerializerSettings())
-    |> OK
+let searchHashtag (input:string) =
+    let mutable response = ""
+    let mutable results = ""
+    let mutable resultsLimit = 10
+    if input.Length > 0 then // search is not white space, valid request
+        if hashtagTweetsListMap.ContainsKey input then // hashtag has tweets, valid search
+            if (hashtagTweetsListMap.[input].Length < 10) then // limit search results to 10
+                resultsLimit <- hashtagTweetsListMap.[input].Length
+            for i in [0..(resultsLimit-1)] do
+                results <- results + "&" + hashtagTweetsListMap.[input].[i]
+            response <- Json.serialize {username = ""; message = results; action = "Search"; ack = "OK"}
+        else // hashtag does not have tweets, invalid search
+            response <- Json.serialize {username = ""; message = "Invalid request, no tweets found for #" + input + "."; action = "Search"; ack = "FAIL"}
+    else // search is white space, invalid request
+        response <- Json.serialize {username = ""; message = "Invalid request, type a hashtag to search. (without '#')"; action = "Search"; ack = "FAIL"}
+    response
 
-  path ("/" + resourceName) >=> POST >=> request(serialize)
+// redirect request to different methods, deserialize and serialize messages
+let redirect page method =
+    let serialize input =
+        JsonConvert.SerializeObject((method (JsonConvert.DeserializeObject(System.Text.Encoding.UTF8.GetString(input.rawForm), typeof<Request>) :?> Request)), JsonSerializerSettings())
+        |> OK
+    path ("/" + page) >=> POST >=> request serialize
 
+// the different urls are handled and mapped to methods here
 let app =
-  choose [
-    GET >=> path "/" >=> Files.file "index.html"
-    entryRequest "login" {Entry = loginUser}
-    entryRequest "register" {Entry = registerUser}
-    entryRequest "follow" {Entry = followUser}
-    entryRequest "tweet" {Entry = tweetUser}
-    path "/feed" >=> handShake feed
-    pathScan "/search/%s" (fun searchKey -> OK (query searchKey))
-  ]
+    choose [
+        GET >=> path "/" >=> Files.file "index.html"
+        redirect "login" loginUser
+        redirect "register" registerUser
+        redirect "follow" followUser
+        redirect "tweet" tweetUser
+        path "/feed" >=> handShake feed
+        pathScan "/searchMention/%s" (fun search -> OK (searchMention search))
+        pathScan "/searchHashtag/%s" (fun search -> OK (searchHashtag search))
+    ]
 
 startWebServer defaultConfig app
