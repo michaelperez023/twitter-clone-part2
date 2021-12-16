@@ -56,7 +56,7 @@ let RsaDecrypt (data : byte[]) (key : RSAParameters) (padding : bool) : byte[] =
     with
     | :? CryptographicException as e ->
         printfn "%A" e.Message
-        Array.empty  
+        Array.empty
 
 let socketSender = MailboxProcessor<string * WebSocket>.Start(fun inbox ->
     let rec messageLoop() = async {
@@ -68,7 +68,7 @@ let socketSender = MailboxProcessor<string * WebSocket>.Start(fun inbox ->
     messageLoop()
 )
 
-let FeedActor (mailbox:Actor<_>) = 
+let FeedActor (mailbox:Actor<_>) =
     let mutable usernameFollowersSetMap = Map.empty
     let mutable onlineUsernameWebSocketMap = Map.empty
     let mutable usernameFeedListMap = Map.empty
@@ -211,7 +211,7 @@ let unfollowUser input =
         else // user is trying to unfollow a user that is not registered, invalid request
             response <- {username = input.username; message = "Invalid request, @" + input.value + " is not registered."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
     else // user is trying to unfollow themself, invalid request
-        response <- {username = input.username; message = "Invalid request, you cannot unfollow yourself."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString 
+        response <- {username = input.username; message = "Invalid request, you cannot unfollow yourself."; action = "Follow"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
     response
 
 let tweetUser input =
