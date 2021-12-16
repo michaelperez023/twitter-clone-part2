@@ -162,9 +162,9 @@ let registerUser input =
         usernameEncryptedPasswordMap <- Map.add input.username cipherArray usernameEncryptedPasswordMap
         usernameFollowersSetMap <- Map.add input.username Set.empty usernameFollowersSetMap
         feedActor <! RegisterUserWithFeedActor(input.username)
-        response <- {username = input.username; message = "@" + input.username + " registered."; action = "Register"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+        response <- {username = input.username; message = "@" + input.username + " registered."; action = "Registration"; ack = "OK"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
     else // invalid request, a user with the same username is already registered
-        response <- {username = input.username; message = "Invalid request, @" + input.username + " is already registered."; action = "Register"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
+        response <- {username = input.username; message = "Invalid request, @" + input.username + " is already registered."; action = "Registration"; ack = "FAIL"} |> Json.toJson |> System.Text.Encoding.UTF8.GetString
     response
 
 let loginUser input =
@@ -250,7 +250,7 @@ let searchMention (input:string) =
     let mutable resultsLimit = 10
     let mutable mention = ""
     if input.Length > 0 then // search is not white space, valid request
-        if input.[0] = '@' then // search starts 
+        if input.[0] = '@' then
             mention <- input.[1..(input.Length-1)]
         else
             mention <- input
