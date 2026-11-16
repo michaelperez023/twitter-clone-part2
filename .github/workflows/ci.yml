@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build, test and smoke run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore packages
+        run: dotnet restore
+
+      - name: Build (warnings fail the build)
+        run: dotnet build --configuration Release --no-restore -warnaserror
+
+      - name: Check the page script
+        run: |
+          node --check src/TwitterClone/wwwroot/app.js
+          # Text from users must go into the page as text, never as HTML
+          if grep -nE 'innerHTML|outerHTML|insertAdjacentHTML|document\.write' src/TwitterClone/wwwroot/app.js; then
+            echo "app.js must not build HTML from strings"
+            exit 1
+          fi
+
+      - name: Run the tests
+        run: dotnet test --configuration Release --no-build
+
+      - name: Smoke run (start the server, then register, log in and tweet with curl)
+        run: |
+          dotnet src/TwitterClone/bin/Release/net10.0/TwitterClone.dll --port 18080 > server.log 2>&1 < /dev/null &
+          server_pid=$!
+          base=http://127.0.0.1:18080
+
+          for _ in $(seq 1 30); do
+            curl -s -o /dev/null "$base/" && break
+            sleep 1
+          done
+
+          curl -sS --fail-with-body "$base/" | grep -q "<title>Twitter Clone</title>"
+
+          json="Content-Type: application/json"
+          credentials='{"username": "ci_user", "password": "not a real password"}'
+          curl -sS --fail-with-body -H "$json" -d "$credentials" "$base/api/register"
+          echo
+          token=$(curl -sS --fail-with-body -H "$json" -d "$credentials" "$base/api/login" | jq -r .token)
+          test -n "$token"
+          test "$token" != null
+          curl -sS --fail-with-body -H "$json" -H "Authorization: Bearer $token" \
+            -d '{"text": "Hello from CI #smoke"}' "$base/api/tweet"
+          echo
+          curl -sS --fail-with-body "$base/api/search/hashtags/smoke" | jq -e '.tweets | length == 1'
+
+          # The server stops cleanly on SIGTERM (a background job ignores SIGINT)
+          kill -TERM "$server_pid"
+          wait "$server_pid"
+          cat server.log
+
+      - name: Show the server log
+        if: failure()
+        run: cat server.log || true
