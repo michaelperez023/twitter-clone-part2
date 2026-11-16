@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TwitterClone/TwitterClone.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TwitterClone.Tests/TwitterClone.Tests.fsproj" />
+  </Folder>
+</Solution>
