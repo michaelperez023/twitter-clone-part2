@@ -2,7 +2,7 @@
 
 A web interface for a Twitter-like engine, written in F#. A [Suave](https://suave.io/) web server serves one page, a JSON API and a WebSocket feed, and one [Akka.NET](https://getakka.net/) actor holds all of the data. Users register, log in, tweet with `#hashtags` and `@mentions`, follow and unfollow each other, and search by hashtag or mention. New tweets from the people they follow, and new followers, appear on the page as they happen.
 
-This is Part II of Project 4 for COP 5615 Distributed Operating System Principles at the University of Florida (Fall 2021, Dr. Alin Dobra). Part I, the engine and a load simulator that talk over Akka.Remote, is in [twitter-clone](https://github.com/michaelperez023/twitter-clone).
+This is Part II of Project 4 for COP 5615 Distributed Operating System Principles at the University of Florida (Fall 2021, Dr. Alin Dobra). It was updated in 2026. Part I, the engine and a load simulator that talk over Akka.Remote, is in [twitter-clone](https://github.com/michaelperez023/twitter-clone).
 
 Written by [Michael Perez](https://github.com/michaelperez023) and [Blas Kojusner](https://github.com/bkojusner).
 
@@ -109,27 +109,6 @@ dotnet test
 - [`ServerTests.fs`](tests/TwitterClone.Tests/ServerTests.fs) starts the real server (Suave and an actor system) on a free port and uses it with `HttpClient` and `ClientWebSocket`: registering, logging in and out, requests without a valid token, malformed JSON, requests that arrive together, live follow notices and tweets, unfollowing, following a user who is offline, closed and dropped connections, tweets with `& $ < > "` in them, searches, and serving the page. It also checks the defaults (600,000 iterations, and the page found next to the program) and the URL the server prints, and drives a connection's sender with a fake socket: a failed send, pings and silence, and a close that is not answered.
 
 The tests use xUnit.net v3 on Microsoft.Testing.Platform, which [`global.json`](global.json) selects for `dotnet test`. They hash passwords with 1,000 iterations instead of 600,000, and take a few seconds.
-
-## Changes since the course submission
-
-The project was updated in 2026. In 2021 it was a single `Project4.fs` (now [`Server.fs`](src/TwitterClone/Server.fs)) and an `index.html`:
-
-- It runs on .NET 10 with Akka.FSharp 1.5.74 and Suave 3.7.2 (it used .NET 5, Akka.FSharp 1.4.13 and Suave 2.5.6). The code is split into `Domain.fs`, `Engine.fs`, `Server.fs` and `Program.fs`, with a solution file, tests and CI.
-- One actor holds all of the state. The request handlers used to change shared maps from many threads at once, so updates could be lost, and the followers were kept twice: in those maps and in the feed actor.
-- Following a user who was offline crashed the feed actor, and Akka.NET restarted it with no data, so every feed and live connection was lost. A page that sent an unknown username did the same. No request can make the engine fail now.
-- Unfollowing never reached the feed actor, so the tweets of an unfollowed user kept arriving.
-- Closing the page never marked the user offline, because the WebSocket handler forgot the username between messages, and a dropped connection was never noticed. Each connection is now unregistered however it ends, and the server pings the pages to notice connections that are gone.
-- One mailbox sent the live messages for every connection, with no error handling, so a single failed send could stop live updates for everyone. Each connection now has its own sender, and a failed send ends only that connection.
-- After logging in, requests only carried a username, so anyone could tweet, follow or read a feed as anyone else. Logging in now returns a session token, which tweeting, following, unfollowing, logging out and the live feed need.
-- Passwords were encrypted with an RSA key made at startup, and decrypted to check them. They are now salted PBKDF2 hashes, compared in constant time. Passwords and live messages were also encoded as ASCII, so a password with an accented letter could never log in, and accented letters and emoji in live tweets arrived as `?`.
-- Only the last hashtag and the last mention of a tweet were indexed, and only the last mention was checked for registration. A tweet refused for mentioning an unregistered user still went into its hashtag's list. Now every hashtag and mention counts, punctuation right after them is left out, and a refused tweet is not stored. Hashtags are now made of the letters A to Z, digits and underscores, like usernames, and match regardless of case (`#FSharp` and `#fsharp` used to be different hashtags).
-- Tweets are now 1 to 280 characters long; there was no limit, and the API took an empty tweet. Tweets now go into the author's own feed as well as the followers' feeds. Feeds, hashtag lists and mention lists keep their 100 most recent tweets; they used to grow without limit.
-- Any text could be a username, including spaces and HTML. Usernames are now 1 to 15 letters (A to Z), digits or underscores.
-- The page inserted tweets and usernames as HTML, so a tweet such as `<img src=x onerror=...>` ran its script in the browser of every follower. All text from users now goes into the page as text.
-- Tweets containing `&` or `$` broke the page, because lists were sent as text joined with those characters. The API now uses JSON with one serializer (there were three) and real HTTP status codes; replies used to be JSON encoded twice, with field names such as `ack@`. The endpoints moved under `/api/` (`/login` is now `/api/login`, and `/searchHashtag/x` is `/api/search/hashtags/x`), and the live feed moved from `/feed` to `/ws`.
-- A hashtag search typed with `#` searched for nothing, because the `#` began a URL fragment. Search terms are now URL-encoded and may start with `#` or `@`. A search with no results used to come back as a failed request, and the page then hit a JavaScript error and showed nothing.
-- The page no longer loads jQuery and w3.css from CDNs or calls a hard-coded `localhost:8080`. It shows errors next to the forms instead of in alerts, counts characters as you type, says when the live connection drops and reconnects, works at phone width, and no longer asks for a "Public Key" that the server ignored. Its element ids are unique and its labels are tied to their inputs.
-- The server finds the page wherever it is started from (it used to need the project folder as its working directory), takes `--port` and `--host`, and stops cleanly on Ctrl+C.
 
 ## Continuous integration
 
