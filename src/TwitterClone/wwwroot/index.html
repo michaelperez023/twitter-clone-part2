@@ -1,473 +1,130 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <script src="//code.jquery.com/jquery-3.6.0.min.js"></script>
-    <title> Login Page </title>
-    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
-    <style>
-        Body {
-            font-family: Calibri, Helvetica, sans-serif;
-            background-color: #1DA1F2;
-        }
-
-        button {
-            background-color: #1DA1F2;
-            width: 100%;
-            color: black;
-            padding: 15px;
-            margin: 10px 0px;
-            border: none;
-            cursor: pointer;
-        }
-
-        input[type=text], input[type=password] {
-            width: 100%;
-            margin: 8px 0;
-            padding: 12px 20px;
-            display: inline-block;
-            border: 2px solid #1DA1F2;
-            box-sizing: border-box;
-        }
-
-        button:hover {
-            opacity: 0.7;
-        }
-
-        .cancelbtn {
-            width: auto;
-            padding: 10px 18px;
-            margin: 10px 5px;
-        }
-
-        .container {
-            padding: 25px;
-            background-color: white;
-        }
-
-        .topnav {
-            overflow: hidden;
-            background-color: #333;
-        }
-
-        .topnav a {
-            float: left;
-            color: #1DA1F2;
-            text-align: center;
-            padding: 14px 16px;
-            text-decoration: none;
-            font-size: 17px;
-        }
-
-        .topnav a:hover {
-            background-color: #1DA1F2;
-            color: black;
-        }
-
-        .topnav a.active {
-            background-color: #1DA1F2;
-            color: white;
-        }
-
-        /* Clear floats after the columns */
-        .row:after {
-            content: "";
-            display: table;
-            clear: both;
-        }
-
-        .card {
-            background: var(--color-background);
-            padding: calc(4 * var(--size-bezel));
-            width: 500px;
-            margin-top: calc(4 * var(--size-bezel));
-        }
-
-        .btn {
-            padding:0px;
-            height:33px;
-            width:100px;
-            text-align: center;
-            color:#f1f1f1;
-        }
-
-        .logout {
-            padding: 0;
-            height:30px;
-            width:75px;
-            background-color: red;
-        }
-        
-        h2{
-            display:inline;
-        }
-        
-    </style>
-
-    <script>
-        function show(shown, hidden) {
-            document.getElementById(shown).style.display = 'block';
-            document.getElementById(hidden).style.display = 'none';
-            return false;
-        }
-    </script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Twitter Clone</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
 </head>
 <body>
-    <center> <h1> Twitter Clone </h1> </center>
-    <div id="loginPage" class="container">
-        <div class="topnav">
-            <a class="active">Login</a>
-            <a onclick="return show('registrationPage','loginPage');">Register</a>
-            <a onclick="alert('You must login before visiting the Home page.');">Home</a>
-            <!--<a onclick="return show('homepage','loginPage');">Home</a>-->
-        </div>
+    <header class="site-header">
+        <h1>Twitter Clone</h1>
+    </header>
 
-        <form id="loginForm" action="http://localhost:8080/login" method="post" role="form">
-            <div class="container">
-                <label>Username : </label>
-                <input type="text" name="username" id="username" tabindex="1" class="form-control" placeholder="Username" value="" required>
-            </div>
-            <div class="container">
-                <label>Password : </label>
-                <input type="password" name="value" id="username" tabindex="2" class="form-control" placeholder="Password" value="" required>
-            </div>
-            <div class="container">
-                <label>Public Key : </label>
-                <input type="text" name="pkey" id="username" tabindex="3" class="form-control" placeholder="pkey" value="" required>
-            </div>
-            <div class="container">
-                <span id="loginError"></span>
-            </div>
-            <button type="submit" tabindex="4">Login</button>
-        </form>
-    </div>
+    <main class="container">
+        <nav class="tabs" aria-label="Pages">
+            <button type="button" class="tab" id="tab-login" aria-current="page">Login</button>
+            <button type="button" class="tab" id="tab-register">Register</button>
+            <button type="button" class="tab" id="tab-home">Home</button>
+        </nav>
+        <p id="nav-message" class="message nav-message" role="status" aria-live="polite"></p>
+        <noscript><p class="message nav-message error">This page needs JavaScript.</p></noscript>
 
-    <div id="registrationPage" class="container" style="display:none">
-        <div class="topnav">
-            <a onclick="return show('loginPage','registrationPage');">Login</a>
-            <a class="active">Register</a>
-            <a onclick="alert('You must login before visiting the Home page.');">Home</a>
-        </div>
+        <section id="login-page" class="page" aria-labelledby="login-heading">
+            <h2 id="login-heading" class="visually-hidden">Log in</h2>
+            <form id="login-form" class="account-form" method="post" novalidate>
+                <label for="login-username">Username</label>
+                <input id="login-username" name="username" type="text" maxlength="15"
+                       autocomplete="username" autocapitalize="none" spellcheck="false">
+                <label for="login-password">Password</label>
+                <input id="login-password" name="password" type="password"
+                       autocomplete="current-password">
+                <button type="submit">Log in</button>
+                <p id="login-message" class="message" role="status" aria-live="polite"></p>
+            </form>
+        </section>
 
-        <form id="registrationForm" action="http://localhost:8080/register" method="post" role="form">
-            <div class="container">
-                <label>Username : </label>
-                <input type="text" name="username" id="username" tabindex="1" class="form-control" placeholder="Username" value="" required>
-            </div>
-            <div class="container">
-                <label>Password : </label>
-                <input type="password" name="value" id="username" tabindex="2" class="form-control" placeholder="Password" value="" required>
-            </div>
-            <div class="container">
-                <label>Public Key : </label>
-                <input type="text" name="pkey" id="username" tabindex="3" class="form-control" placeholder="pkey" value="" required>
-            </div>
-            <div class="container">
-                <span id="registrationError"></span>
-            </div>
-            <button type="submit" tabindex="4">Register</button>
-        </form>
-    </div>
+        <section id="register-page" class="page" aria-labelledby="register-heading" hidden>
+            <h2 id="register-heading" class="visually-hidden">Register</h2>
+            <form id="register-form" class="account-form" method="post" novalidate>
+                <label for="register-username">Username</label>
+                <input id="register-username" name="username" type="text" maxlength="15"
+                       autocomplete="username" autocapitalize="none" spellcheck="false"
+                       aria-describedby="register-username-hint">
+                <p id="register-username-hint" class="hint">1 to 15 letters (A-Z, a-z), digits or underscores.</p>
+                <label for="register-password">Password</label>
+                <input id="register-password" name="password" type="password"
+                       autocomplete="new-password" aria-describedby="register-password-hint">
+                <p id="register-password-hint" class="hint">This demo has no TLS, so don't reuse a real password.</p>
+                <button type="submit">Register</button>
+                <p id="register-message" class="message" role="status" aria-live="polite"></p>
+            </form>
+        </section>
 
-    <div id="homePage" class="container" style="display:none">
-        <div class="topnav">
-            <a onclick="return show('loginPage','homePage');">Login</a>
-            <a onclick="return show('registrationPage','homePage');">Register</a>
-            <a class="active">Home</a>
-        </div>
-        
-        <div><h2> Logged in as @</h2><h2 id="user"></h2></div>
+        <section id="home-page" class="page" aria-labelledby="home-heading" hidden>
+            <div class="home-bar">
+                <h2 id="home-heading" tabindex="-1">Logged in as <span id="current-user"></span></h2>
+                <p class="connection">
+                    <span id="connection-status" class="status" role="status" aria-live="polite"></span>
+                    <button type="button" id="reconnect-button" class="secondary small" hidden>Reconnect now</button>
+                </p>
+                <button type="button" id="logout-button" class="logout">Log out</button>
+            </div>
 
-         <div class="row" style="display:block; width:100%;">
-             <div style="width:50%; float: left; display: inline-block;" style="background-color:#aaa;">
-                <h3>Tweet</h3>
-                <div class="card">
-                    <form id="tweetForm" class="form-horizontal" action="http://localhost:8080/tweet" method="post" role="form">
-                        <label class="input">
-                            <input class="form-control" placeholder="Type tweet here" type="text" name="value" required/>
-                            <button class="btn" type="submit" name="tweet-button">Tweet</button>
-                        </label>
+            <div class="columns">
+                <div class="column actions">
+                    <form id="tweet-form" class="card" novalidate>
+                        <label for="tweet-text" class="card-title">Tweet</label>
+                        <textarea id="tweet-text" name="text" rows="3"
+                                  placeholder="What's happening? Use #hashtags and @mentions."
+                                  aria-describedby="tweet-counter"></textarea>
+                        <div class="form-row">
+                            <span id="tweet-counter" class="counter">0 / 280</span>
+                            <button type="submit" id="tweet-button">Tweet</button>
+                        </div>
+                        <p id="tweet-message" class="message" role="status" aria-live="polite"></p>
                     </form>
-                </div>
-                
-                <h3>Follow</h3>
-                <div class="card">
-                    <form id="followForm" class="form-horizontal" action="http://localhost:8080/follow" method="post" role="form">
-                        <label class="input">
-                            <input class="form-control" placeholder="Type username here (without '@')" type="text" name="value" required>
-                            <button class="btn" type="submit" name="follow-button">Follow</button>
-                        </label>
-                    </form>
-                </div>
 
-                <h3>Unfollow</h3>
-                <div class="card">
-                    <form id="unfollowForm" class="form-horizontal" action="http://localhost:8080/unfollow" method="post" role="form">
-                        <label class="input">
-                            <input class="form-control" placeholder="Type username here (without '@')" type="text" name="value" required>
-                            <button class="btn" type="submit" name="unfollow-button">UnFollow</button>
-                        </label>
+                    <form id="follow-form" class="card" novalidate>
+                        <label for="follow-username" class="card-title">Follow or unfollow</label>
+                        <input id="follow-username" name="username" type="text" maxlength="16"
+                               placeholder="username" autocomplete="off" autocapitalize="none" spellcheck="false">
+                        <div class="form-row">
+                            <button type="submit" id="follow-button" value="follow">Follow</button>
+                            <button type="submit" id="unfollow-button" value="unfollow" class="secondary">Unfollow</button>
+                        </div>
+                        <p id="follow-message" class="message" role="status" aria-live="polite"></p>
                     </form>
-                </div>
-                
-                <h3>Search Mention</h3>
-                <div class="card">
-                    <form id="searchMentionForm" class="form" action="http://localhost:8080/searchMention" method="post" role="form">
-                        <label class="input">
-                            <input class="form-control" placeholder="Type username here  (with or without '@')" type="text" name="value" required>
-                            <button class="btn" type="submit" name="search-button">Search</button>
-                        </label>
+
+                    <form id="mention-search-form" class="card" novalidate>
+                        <label for="mention-search-term" class="card-title">Search mentions</label>
+                        <div class="form-row">
+                            <input id="mention-search-term" name="term" type="text" maxlength="16"
+                                   placeholder="@username" autocomplete="off" autocapitalize="none" spellcheck="false">
+                            <button type="submit" id="mention-search-button">Search</button>
+                        </div>
+                    </form>
+
+                    <form id="hashtag-search-form" class="card" novalidate>
+                        <label for="hashtag-search-term" class="card-title">Search hashtags</label>
+                        <div class="form-row">
+                            <input id="hashtag-search-term" name="term" type="text" maxlength="100"
+                                   placeholder="#hashtag" autocomplete="off" autocapitalize="none" spellcheck="false">
+                            <button type="submit" id="hashtag-search-button">Search</button>
+                        </div>
                     </form>
                 </div>
 
-                <h3>Search Hashtag</h3>
-                <div class="card">
-                    <form id="searchHashtagForm" class="form" action="http://localhost:8080/searchHashtag" method="post" role="form">
-                        <label class="input">
-                            <input class="form-control" placeholder="Type hashtag here (without '#')" type="text" name="value" required>
-                            <button class="btn" type="submit" name="search-button">Search</button>
-                        </label>
-                    </form>
-                </div>
+                <section class="column" aria-labelledby="feed-heading">
+                    <h3 id="feed-heading">Feed</h3>
+                    <p id="feed-empty" class="empty">Nothing in your feed yet.</p>
+                    <ol id="feed-list" class="tweets"></ol>
+                </section>
 
-                <button class="logout" type="submit" onClick="location.reload();">Logout</button>
-             </div>
+                <section class="column" aria-labelledby="search-heading">
+                    <h3 id="search-heading">Search results</h3>
+                    <p id="search-summary" class="empty" role="status" aria-live="polite">Search for a mention or a hashtag.</p>
+                    <ol id="search-list" class="tweets"></ol>
+                </section>
+            </div>
+        </section>
+    </main>
 
-             <div style="width:50%; float: left; display: inline-block;" style="background-color:#bbb;">
-                 <h3>Feed Results</h3>
-                 <div class="w3-panel w3-blue w3-card-4">
-                     <ul id="feedResults" class="list-group"></ul>
-                 </div>
-
-                 <h3>Search Results</h3>
-                 <div class="w3-panel w3-blue w3-card-4">
-                    <ul id="searchResults" class="list-group">
-                    </ul>
-                </div>
-             </div>
-         </div>
-        
-    </div>
-
-    <script>
-        function initWebSocket(username) {
-            websocket = new WebSocket("ws://localhost:8080/feed");
-            websocket.onopen = function(evt) { onOpen(evt, username) };
-            websocket.onclose = function(evt) { onClose(evt) };
-            websocket.onmessage = function(evt) { onMessage(evt) };
-            websocket.onerror = function(evt) { onError(evt) };
-        }
-
-        function onOpen(evt, username) {
-            websocket.send(JSON.stringify({'username': username, 'value': ""}));
-        }
-
-        function printFeed(msg, username, action) {
-            if($("#feedResults li").length === 1 && $($(".feed"),"li:eq(0)", $("#feedResults"))[0].innerText === "Nothing in feed yet.") {
-                $("#feedResults").empty();
-            }
-
-            if($("#searchResults li").length === 0) {
-                var temp = "No search results yet."
-                var item2 = "<li><div class='feed'>" + temp + "</div></li>";
-                $("#searchResults").prepend(item2);
-            }
-
-            if(action === "Follow") {
-                var item = "<li><div class='feed'>" + msg + "</div></li>";
-                $("#feedResults").prepend(item);
-            } else if(action === "Feed") {
-                var msgSplit = msg.split('&');
-                for (var i = 1; i < msgSplit.length; i++) {
-                    var msgParts = msgSplit[i].split('$')
-                    var item = "<li><div class='feed'><span>" + msgParts[0] + "</span><br><span>" + msgParts[1] + "</span></div></li>";    
-                    $("#feedResults").prepend(item);
-                } 
-            } else {
-                var item = "<li><div class='feed'><span>" + username + "</span><br><span>" + msg + "</span></div></li>"; 
-                $("#feedResults").prepend(item);
-            }
-        }
-
-        function onClose(evt) {
-            websocket.close();
-            location.reload();
-        }
-
-        function onMessage(evt) {
-            var parsed = JSON.parse(evt.data);
-            if(parsed['action'] === "Follow") {
-                printFeed(parsed['message'], parsed['username'], parsed['action']);
-            } else if(parsed['action'] !== "Feed") {
-                var msgPartArray = parsed['message'].split('$');
-                printFeed(msgPartArray[1], msgPartArray[0], parsed['action']);
-            } else {
-                printFeed(parsed['message'], parsed['username'], parsed['action']);
-            }
-        }
-
-        function onError(evt) {
-            writeToScreen('<span style="color: red;">ERROR:</span> ' + evt.data);
-        }   
-
-        async function sendAndWaitForResponse({ url, formData }) {
-            const formString = JSON.stringify(Object.fromEntries(formData.entries()));
-            //alert(formString)
-            const fetchOptions = {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-                body: formString,
-            };
-            const response = await fetch(url, fetchOptions);
-            if (!response.ok) {
-                const errorMessage = await response.text();
-                throw new Error(errorMessage);
-            }
-	        return response.json();
-        }
-
-        async function login(event) {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const url = form.action;
-            try {
-                const formData = new FormData(form);
-                const responseData = await sendAndWaitForResponse({ url, formData });
-                var v = JSON.parse(responseData);
-                if(v['ack@'] === "FAIL") {
-                    $('#loginError').text(v['message@']);
-                    $("#loginForm")[0].reset();
-                } else {
-                    show('homePage', 'loginPage');
-                    user = v['username@'];
-                    $('#user').text(user);
-                    initWebSocket(v['username@']);
-                }
-            } catch (error) {
-                console.error(error);
-            }
-        }
-
-        async function register(event) {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const url = form.action;
-            try {
-                const formData = new FormData(form);
-                const responseData = await sendAndWaitForResponse({ url, formData });
-                var parsed = JSON.parse(responseData);
-                if(parsed['ack@'] === "FAIL") {
-                    $('#registrationError').text(parsed['message@']);
-                } else {
-                    $("#registrationForm")[0].reset();
-                    show('loginPage','registrationPage');
-                    $('#loginError').text('');
-                    $('#registrationError').text('');
-                }           
-            } catch (error) {
-                console.error(error);
-            }
-        }
-
-        function clearForms() {
-            $("#tweetForm")[0].reset();
-            $("#searchMentionForm")[0].reset();
-            $("#searchHashtagForm")[0].reset();
-            $("#followForm")[0].reset();
-        }
-
-        function printSearchResults(msg, username, ser) {
-            $("#searchResults").empty();
-            var msgSplit = msg.split('&');
-            for (var i = 1; i < msgSplit.length; i++) {
-                var msgPartArray = msgSplit[i].split('$')
-                if(msgPartArray.length > 1) {
-                    var item = "<li><div class='feed'><span>" + msgPartArray[0] + "</span><br><span>" + msgPartArray[1] + "</span></div></li>";    
-                } else {
-                    var item = "<li><div class='feed'><span>" + msgPartArray[0] + "</span></div></li>";    
-                }
-                $("#searchResults").append(item);
-            }
-        }
-
-        async function tweetOrFollowOrUnfollow(event) {
-            event.preventDefault();
-            const form = event.currentTarget;
-            const url = form.action;
-            try {
-                const formData = new FormData(form);
-                formData.append('username', user);
-                const responseData = await sendAndWaitForResponse({ url, formData });
-                var parsed = JSON.parse(responseData);
-                clearForms();
-                if(parsed['ack@'] === "FAIL") {
-                    alert(parsed['message@']);
-                } else {
-                    if(parsed['action@'] === "Follow") {
-                        printFeed(parsed['message@'], parsed['username@'], parsed['action@']);
-                    } else if(parsed['action@'] !== "Search") {
-                        var temp = parsed['message@'].split('$');
-                        printFeed(temp[1], temp[0], parsed['action@']);
-                    } else {
-                        printSearchResults(parsed['message@'], parsed['username@'], parsed['action@']);
-                    }
-                }               
-            } catch (error) {
-                console.error(error);
-            }
-        }
-
-        async function GetSearchJson({ url }) {
-            const fetchOptions = {
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
-            };
-            const response = await fetch(url, fetchOptions);
-            if (!response.ok) {
-                const errorMessage = await response.text();
-                throw new Error(errorMessage);
-            }
-	        return response.json();
-        }
-
-        async function search(event) {
-            event.preventDefault();
-            const form = event.currentTarget;
-            var url = form.action;
-            try {
-                const formData = new FormData(form);
-                url = url + "/" + formData.get('value');
-                const results = await GetSearchJson({ url });
-                clearForms();
-                if(results['ack'] === "FAIL") {
-                    alert(v['message']);
-                } else {
-                    printSearchResults(results['message'], results['username'], results['action']);
-                }               
-            } catch (error) {
-                console.error(error);
-            }                
-        }
-
-        const loginForm = document.getElementById('loginForm');
-        const registrationForm = document.getElementById('registrationForm');
-        const followForm = document.getElementById("followForm");
-        const unfollowForm = document.getElementById("unfollowForm");
-        const tweetForm = document.getElementById("tweetForm");
-        const searchMentionForm = document.getElementById("searchMentionForm");
-        const searchHashtagForm = document.getElementById("searchHashtagForm");
-        loginForm.addEventListener('submit', login);
-        registrationForm.addEventListener('submit', register);
-        followForm.addEventListener("submit", tweetOrFollowOrUnfollow);
-        unfollowForm.addEventListener("submit", tweetOrFollowOrUnfollow);
-        tweetForm.addEventListener("submit", tweetOrFollowOrUnfollow);
-        searchMentionForm.addEventListener("submit", search);
-        searchHashtagForm.addEventListener("submit", search);
-    </script>
+    <footer class="site-footer">
+        A course project demo: everything is kept in memory and is gone when the server restarts,
+        and there is no TLS, so don't use a real password.
+    </footer>
 </body>
 </html>
