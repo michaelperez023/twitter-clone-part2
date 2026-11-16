@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+
+# Test results
+TestResults/
+
+# Editor and OS files
+.ionide/
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs from local runs
+*.log
